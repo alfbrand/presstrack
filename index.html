@@ -148,12 +148,26 @@
     .cost-preview { background: var(--bg2); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; font-size: 13px; }
 
     /* SETTINGS MODAL */
-    #settings-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+    #settings-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: flex-start; justify-content: center; padding: 1rem; overflow-y: auto; }
     #settings-overlay.open { display: flex; }
-    #settings-panel { background: var(--bg); border-radius: var(--radius-lg); padding: 1.5rem; width: 100%; max-width: 480px; border: 0.5px solid var(--border); }
+    #settings-panel { background: var(--bg); border-radius: var(--radius-lg); padding: 1.5rem; width: 100%; max-width: 560px; border: 0.5px solid var(--border); margin: auto; }
     #settings-panel h2 { font-size: 16px; font-weight: 600; margin-bottom: 1rem; }
     .api-key-wrap { display: flex; gap: 8px; }
     .api-key-wrap input { flex: 1; font-family: monospace; }
+
+    /* CATALOG MANAGER */
+    .cat-tabs { display: flex; gap: 0; border-bottom: 0.5px solid var(--border); margin-bottom: 12px; }
+    .cat-tab { padding: 7px 14px; font-size: 13px; cursor: pointer; border: none; background: none; color: var(--text2); border-bottom: 2px solid transparent; margin-bottom: -0.5px; font-family: var(--font); white-space: nowrap; }
+    .cat-tab.active { color: var(--text); border-bottom-color: var(--text); font-weight: 500; }
+    .cat-tab:hover:not(.active) { color: var(--text); }
+    .cat-panel { display: none; }
+    .cat-panel.active { display: block; }
+    .cat-list { display: flex; flex-direction: column; gap: 6px; max-height: 260px; overflow-y: auto; margin-bottom: 10px; padding-right: 4px; }
+    .cat-item { display: flex; align-items: center; gap: 6px; background: var(--bg2); border-radius: var(--radius); padding: 6px 8px; }
+    .cat-item-label { flex: 1; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .cat-item input { flex: 1; font-size: 13px; padding: 4px 7px; }
+    .cat-brand-header { font-size: 12px; font-weight: 600; color: var(--text2); margin: 10px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
+    .cat-empty { font-size: 13px; color: var(--text3); text-align: center; padding: 1rem; }
 
     /* VERSION BADGE */
     .version { font-size: 11px; color: var(--text3); }
@@ -385,21 +399,95 @@
 <!-- SETTINGS MODAL -->
 <div id="settings-overlay" onclick="closeSettingsIfOutside(event)">
   <div id="settings-panel">
-    <h2>Settings</h2>
-    <div class="field" style="margin-bottom:1rem">
-      <span class="label">Anthropic API key</span>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem">
+      <h2 style="margin:0">Settings</h2>
+      <button class="btn-icon" onclick="closeSettings()">✕</button>
+    </div>
+
+    <!-- API KEY -->
+    <p class="sub-label">Anthropic API key</p>
+    <div class="field" style="margin-bottom:10px">
       <div class="api-key-wrap">
         <input type="password" id="api-key-input" placeholder="sk-ant-...">
         <button class="btn" onclick="toggleApiKeyVisible()">Show</button>
       </div>
-      <span class="hint">Used only for AI receipt parsing. Stored locally in your browser — never sent anywhere except Anthropic's API.</span>
+      <span class="hint">Used only for AI receipt parsing. Stored locally — never touches GitHub.</span>
     </div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="saveApiKey()">Save key</button>
-      <button class="btn btn-danger" onclick="clearApiKey()">Remove key</button>
-      <button class="btn" onclick="closeSettings()">Close</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem">
+      <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save key</button>
+      <button class="btn btn-danger btn-sm" onclick="clearApiKey()">Remove key</button>
     </div>
+
     <hr class="divider">
+
+    <!-- CATALOG MANAGER -->
+    <p class="sub-label">Manage catalog</p>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Click any entry to rename it. Changes update everywhere — inventory, dropdowns, and order log.</p>
+    <div class="cat-tabs">
+      <button class="cat-tab active" onclick="showCatTab('brands')">Brands</button>
+      <button class="cat-tab" onclick="showCatTab('styles')">Styles / SKUs</button>
+      <button class="cat-tab" onclick="showCatTab('colors')">Colors</button>
+      <button class="cat-tab" onclick="showCatTab('types')">Types</button>
+      <button class="cat-tab" onclick="showCatTab('shops')">Shops</button>
+    </div>
+
+    <!-- BRANDS -->
+    <div class="cat-panel active" id="cat-brands">
+      <div class="cat-list" id="cat-brands-list"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="cat-brand-new" placeholder="Add brand…" style="flex:1;font-size:13px;padding:6px 9px">
+        <button class="btn btn-sm" onclick="catAdd('brand')">Add</button>
+      </div>
+    </div>
+
+    <!-- STYLES -->
+    <div class="cat-panel" id="cat-styles">
+      <div class="field" style="margin-bottom:8px">
+        <span class="label">Filter by brand</span>
+        <select id="cat-style-brand-filter" onchange="renderCatStyles()" style="font-size:13px;padding:6px 9px">
+          <option value="">All brands</option>
+        </select>
+      </div>
+      <div class="cat-list" id="cat-styles-list"></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+        <select id="cat-style-brand-for-new" style="flex:1;min-width:100px;font-size:13px;padding:6px 9px">
+          <option value="">Brand…</option>
+        </select>
+        <input type="text" id="cat-style-new" placeholder="Add style/SKU…" style="flex:1;font-size:13px;padding:6px 9px">
+        <button class="btn btn-sm" onclick="catAdd('style')">Add</button>
+      </div>
+    </div>
+
+    <!-- COLORS -->
+    <div class="cat-panel" id="cat-colors">
+      <div class="cat-list" id="cat-colors-list"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="cat-color-new" placeholder="Add color…" style="flex:1;font-size:13px;padding:6px 9px">
+        <button class="btn btn-sm" onclick="catAdd('color')">Add</button>
+      </div>
+    </div>
+
+    <!-- TYPES -->
+    <div class="cat-panel" id="cat-types">
+      <div class="cat-list" id="cat-types-list"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="cat-type-new" placeholder="Add type…" style="flex:1;font-size:13px;padding:6px 9px">
+        <button class="btn btn-sm" onclick="catAdd('type')">Add</button>
+      </div>
+    </div>
+
+    <!-- SHOPS -->
+    <div class="cat-panel" id="cat-shops">
+      <div class="cat-list" id="cat-shops-list"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="cat-shop-new" placeholder="Add shop…" style="flex:1;font-size:13px;padding:6px 9px">
+        <button class="btn btn-sm" onclick="catAdd('shop')">Add</button>
+      </div>
+    </div>
+
+    <hr class="divider">
+
+    <!-- DATA -->
     <p class="sub-label">Data</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       <button class="btn btn-sm" onclick="exportData()">Export backup (JSON)</button>
@@ -457,11 +545,6 @@ function stylesForBrand(brand) {
 }
 
 // ── SETTINGS ───────────────────────────────────────────────────────
-function openSettings() {
-  const key = localStorage.getItem('pt_api_key') || '';
-  document.getElementById('api-key-input').value = key;
-  document.getElementById('settings-overlay').classList.add('open');
-}
 function closeSettings() { document.getElementById('settings-overlay').classList.remove('open'); }
 function closeSettingsIfOutside(e) { if(e.target.id==='settings-overlay') closeSettings(); }
 function toggleApiKeyVisible() {
@@ -487,6 +570,235 @@ function clearApiKey() {
 function checkApiNotice() {
   const notice = document.getElementById('api-notice');
   notice.style.display = localStorage.getItem('pt_api_key') ? 'none' : 'block';
+}
+
+// ── CATALOG MANAGER ────────────────────────────────────────────────
+function openSettings() {
+  const key = localStorage.getItem('pt_api_key') || '';
+  document.getElementById('api-key-input').value = key;
+  renderCatBrands();
+  renderCatStyles();
+  renderCatColors();
+  renderCatTypes();
+  renderCatShops();
+  populateCatStyleBrandDropdowns();
+  document.getElementById('settings-overlay').classList.add('open');
+}
+
+function showCatTab(tab) {
+  document.querySelectorAll('.cat-tab').forEach((el,i)=>{
+    el.classList.remove('active');
+    if(['brands','styles','colors','types','shops'][i]===tab) el.classList.add('active');
+  });
+  document.querySelectorAll('.cat-panel').forEach(el=>el.classList.remove('active'));
+  document.getElementById('cat-'+tab).classList.add('active');
+  if(tab==='styles') renderCatStyles();
+}
+
+function populateCatStyleBrandDropdowns() {
+  const brands = [...customBrands].sort();
+  const filter = document.getElementById('cat-style-brand-filter');
+  const forNew = document.getElementById('cat-style-brand-for-new');
+  const filterCur = filter.value;
+  filter.innerHTML = '<option value="">All brands</option>' + brands.map(b=>`<option${b===filterCur?' selected':''}>${b}</option>`).join('');
+  forNew.innerHTML = '<option value="">Brand…</option>' + brands.map(b=>`<option>${b}</option>`).join('');
+}
+
+function makeCatItem(label, onRename, onDelete) {
+  const item = document.createElement('div');
+  item.className = 'cat-item';
+  item.innerHTML = `
+    <span class="cat-item-label" title="${label}">${label}</span>
+    <button class="btn btn-sm" onclick="this.closest('.cat-item').querySelector('span').style.display='none';this.closest('.cat-item').querySelector('input').style.display='';this.closest('.cat-item').querySelector('input').focus();this.style.display='none';this.closest('.cat-item').querySelector('.cat-save').style.display='';">Rename</button>
+    <input type="text" value="${label}" style="display:none;font-size:13px;padding:4px 7px;flex:1" onkeydown="if(event.key==='Enter')this.closest('.cat-item').querySelector('.cat-save').click()">
+    <button class="btn btn-sm cat-save" style="display:none">Save</button>
+    <button class="btn btn-danger btn-sm">Delete</button>`;
+  item.querySelector('.cat-save').onclick = () => {
+    const newVal = item.querySelector('input').value.trim();
+    if(!newVal) return;
+    onRename(newVal);
+  };
+  item.querySelector('.btn-danger').onclick = onDelete;
+  return item;
+}
+
+function renderCatBrands() {
+  const list = document.getElementById('cat-brands-list');
+  list.innerHTML = '';
+  const brands = [...customBrands].sort();
+  if(!brands.length) { list.innerHTML='<div class="cat-empty">No brands yet</div>'; return; }
+  brands.forEach(brand => {
+    const item = makeCatItem(brand,
+      newName => { renameBrand(brand, newName); renderCatBrands(); populateCatStyleBrandDropdowns(); },
+      ()      => { if(!confirmDelete('brand', brand)) return; deleteBrand(brand); renderCatBrands(); populateCatStyleBrandDropdowns(); renderCatStyles(); }
+    );
+    list.appendChild(item);
+  });
+}
+
+function renderCatStyles() {
+  const list = document.getElementById('cat-styles-list');
+  list.innerHTML = '';
+  const filterBrand = document.getElementById('cat-style-brand-filter').value;
+  const brandsToShow = filterBrand ? [filterBrand] : [...customBrands].sort();
+  let anyShown = false;
+  brandsToShow.forEach(brand => {
+    const styles = stylesForBrand(brand).filter(s => !BRAND_STYLES[brand]?.includes(s) || brandStyles[brand]?.includes(s) || inventory.some(i=>i.brand===brand&&i.style===s));
+    const allStyles = stylesForBrand(brand);
+    if(!allStyles.length) return;
+    if(!filterBrand) {
+      const hdr = document.createElement('div');
+      hdr.className = 'cat-brand-header';
+      hdr.textContent = brand;
+      list.appendChild(hdr);
+    }
+    allStyles.forEach(style => {
+      anyShown = true;
+      const item = makeCatItem(style,
+        newName => { renameStyle(brand, style, newName); renderCatStyles(); },
+        ()      => { if(!confirmDelete('style', style, brand)) return; deleteStyle(brand, style); renderCatStyles(); }
+      );
+      list.appendChild(item);
+    });
+  });
+  if(!anyShown) list.innerHTML='<div class="cat-empty">No styles on record for this brand</div>';
+}
+
+function renderCatColors() {
+  const list = document.getElementById('cat-colors-list');
+  list.innerHTML = '';
+  const colors = [...customColors].sort();
+  if(!colors.length) { list.innerHTML='<div class="cat-empty">No colors yet</div>'; return; }
+  colors.forEach(color => {
+    const item = makeCatItem(color,
+      newName => { renameColor(color, newName); renderCatColors(); },
+      ()      => { if(!confirmDelete('color', color)) return; deleteColor(color); renderCatColors(); }
+    );
+    list.appendChild(item);
+  });
+}
+
+function renderCatTypes() {
+  const list = document.getElementById('cat-types-list');
+  list.innerHTML = '';
+  const types = [...customTypes].sort();
+  if(!types.length) { list.innerHTML='<div class="cat-empty">No types yet</div>'; return; }
+  types.forEach(type => {
+    const item = makeCatItem(type,
+      newName => { renameType(type, newName); renderCatTypes(); },
+      ()      => { if(!confirmDelete('type', type)) return; deleteType(type); renderCatTypes(); }
+    );
+    list.appendChild(item);
+  });
+}
+
+function renderCatShops() {
+  const list = document.getElementById('cat-shops-list');
+  list.innerHTML = '';
+  const shops = [...customShops].sort();
+  if(!shops.length) { list.innerHTML='<div class="cat-empty">No shops yet</div>'; return; }
+  shops.forEach(shop => {
+    const item = makeCatItem(shop,
+      newName => { renameShop(shop, newName); renderCatShops(); },
+      ()      => { if(!confirmDelete('shop', shop)) return; deleteShop(shop); renderCatShops(); }
+    );
+    list.appendChild(item);
+  });
+}
+
+function confirmDelete(type, name, brand) {
+  const inUse = type==='brand'  ? inventory.some(i=>i.brand===name)
+              : type==='style'  ? inventory.some(i=>i.brand===brand&&i.style===name)
+              : type==='color'  ? inventory.some(i=>i.color===name)
+              : type==='type'   ? inventory.some(i=>i.type===name)
+              : type==='shop'   ? orderLog.some(o=>o.shop===name)
+              : false;
+  const warn = inUse ? `\n\n⚠️ This ${type} is used in your inventory or order log. Removing it from the catalog won't delete those records, but it will disappear from dropdowns.` : '';
+  return confirm(`Remove "${name}" from the ${type} list?${warn}`);
+}
+
+// ── RENAME FUNCTIONS ───────────────────────────────────────────────
+function renameBrand(oldVal, newVal) {
+  if(!newVal || newVal===oldVal) return;
+  customBrands = customBrands.map(v=>v===oldVal?newVal:v);
+  if(brandStyles[oldVal]) { brandStyles[newVal]=brandStyles[oldVal]; delete brandStyles[oldVal]; }
+  inventory.forEach(i=>{ if(i.brand===oldVal) i.brand=newVal; });
+  orderLog.forEach(o=>{ if(o.brand===oldVal) o.brand=newVal; });
+  saveOptions(); save(); saveLog();
+}
+function renameStyle(brand, oldVal, newVal) {
+  if(!newVal || newVal===oldVal) return;
+  if(brandStyles[brand]) brandStyles[brand]=brandStyles[brand].map(s=>s===oldVal?newVal:s);
+  inventory.forEach(i=>{ if(i.brand===brand&&i.style===oldVal) i.style=newVal; });
+  orderLog.forEach(o=>{ if(o.brand===brand&&o.style===oldVal) o.style=newVal; });
+  saveOptions(); save(); saveLog();
+}
+function renameColor(oldVal, newVal) {
+  if(!newVal || newVal===oldVal) return;
+  customColors = customColors.map(v=>v===oldVal?newVal:v);
+  inventory.forEach(i=>{ if(i.color===oldVal) i.color=newVal; });
+  orderLog.forEach(o=>{ if(o.color===oldVal) o.color=newVal; });
+  saveOptions(); save(); saveLog();
+}
+function renameType(oldVal, newVal) {
+  if(!newVal || newVal===oldVal) return;
+  customTypes = customTypes.map(v=>v===oldVal?newVal:v);
+  inventory.forEach(i=>{ if(i.type===oldVal) i.type=newVal; });
+  orderLog.forEach(o=>{ if(o.type===oldVal) o.type=newVal; });
+  saveOptions(); save(); saveLog();
+}
+function renameShop(oldVal, newVal) {
+  if(!newVal || newVal===oldVal) return;
+  customShops = customShops.map(v=>v===oldVal?newVal:v);
+  orderLog.forEach(o=>{ if(o.shop===oldVal) o.shop=newVal; });
+  saveOptions(); saveLog();
+}
+
+// ── DELETE FUNCTIONS ───────────────────────────────────────────────
+function deleteBrand(val) {
+  customBrands = customBrands.filter(v=>v!==val);
+  delete brandStyles[val];
+  saveOptions();
+}
+function deleteStyle(brand, val) {
+  if(brandStyles[brand]) brandStyles[brand]=brandStyles[brand].filter(s=>s!==val);
+  saveOptions();
+}
+function deleteColor(val) { customColors=customColors.filter(v=>v!==val); saveOptions(); }
+function deleteType(val)  { customTypes=customTypes.filter(v=>v!==val);   saveOptions(); }
+function deleteShop(val)  { customShops=customShops.filter(v=>v!==val);   saveOptions(); }
+
+// ── ADD FROM CATALOG PANEL ─────────────────────────────────────────
+function catAdd(field) {
+  if(field==='brand') {
+    const val=document.getElementById('cat-brand-new').value.trim(); if(!val) return;
+    if(!customBrands.includes(val)) customBrands.push(val);
+    saveOptions(); document.getElementById('cat-brand-new').value='';
+    renderCatBrands(); populateCatStyleBrandDropdowns();
+  } else if(field==='style') {
+    const brand=document.getElementById('cat-style-brand-for-new').value;
+    const val=document.getElementById('cat-style-new').value.trim();
+    if(!brand||!val) { alert('Select a brand and enter a style/SKU.'); return; }
+    if(!brandStyles[brand]) brandStyles[brand]=[];
+    if(!brandStyles[brand].includes(val)) brandStyles[brand].push(val);
+    saveOptions(); document.getElementById('cat-style-new').value='';
+    renderCatStyles();
+  } else if(field==='color') {
+    const val=document.getElementById('cat-color-new').value.trim(); if(!val) return;
+    if(!customColors.includes(val)) customColors.push(val);
+    saveOptions(); document.getElementById('cat-color-new').value='';
+    renderCatColors();
+  } else if(field==='type') {
+    const val=document.getElementById('cat-type-new').value.trim(); if(!val) return;
+    if(!customTypes.includes(val)) customTypes.push(val);
+    saveOptions(); document.getElementById('cat-type-new').value='';
+    renderCatTypes();
+  } else if(field==='shop') {
+    const val=document.getElementById('cat-shop-new').value.trim(); if(!val) return;
+    if(!customShops.includes(val)) customShops.push(val);
+    saveOptions(); document.getElementById('cat-shop-new').value='';
+    renderCatShops();
+  }
 }
 
 // ── EXPORT / IMPORT ────────────────────────────────────────────────
