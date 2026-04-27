@@ -538,10 +538,15 @@ function fmt(n) { return n!=null ? '$'+Number(n).toFixed(2) : '—'; }
 function esc(v) { return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
 function stylesForBrand(brand) {
-  const base   = BRAND_STYLES[brand] || [];
-  const custom = brandStyles[brand]  || [];
+  // If brandStyles[brand] exists it is the source of truth (user may have deleted/renamed built-ins)
+  // Otherwise fall back to merging BRAND_STYLES defaults with inventory
+  const owned = brandStyles[brand];
   const fromInv = inventory.filter(i=>i.brand===brand).map(i=>i.style).filter(Boolean);
-  return [...new Set([...base,...custom,...fromInv])].sort();
+  if(owned) {
+    return [...new Set([...owned, ...fromInv])].sort();
+  }
+  const base = BRAND_STYLES[brand] || [];
+  return [...new Set([...base, ...fromInv])].sort();
 }
 
 // ── SETTINGS ───────────────────────────────────────────────────────
@@ -760,7 +765,12 @@ function renameBrand(oldVal, newVal) {
 }
 function renameStyle(brand, oldVal, newVal) {
   if(!newVal || newVal===oldVal) return;
-  if(brandStyles[brand]) brandStyles[brand]=brandStyles[brand].map(s=>s===oldVal?newVal:s);
+  // Seed brandStyles from defaults if not yet customised, so built-in styles are editable
+  if(!brandStyles[brand]) brandStyles[brand] = [...(BRAND_STYLES[brand] || [])];
+  else {
+    (BRAND_STYLES[brand] || []).forEach(s => { if(!brandStyles[brand].includes(s)) brandStyles[brand].push(s); });
+  }
+  brandStyles[brand] = brandStyles[brand].map(s => s===oldVal ? newVal : s);
   inventory.forEach(i=>{ if(i.brand===brand&&i.style===oldVal) i.style=newVal; });
   orderLog.forEach(o=>{ if(o.brand===brand&&o.style===oldVal) o.style=newVal; });
   saveOptions(); save(); saveLog();
@@ -793,7 +803,12 @@ function deleteBrand(val) {
   saveOptions();
 }
 function deleteStyle(brand, val) {
-  if(brandStyles[brand]) brandStyles[brand]=brandStyles[brand].filter(s=>s!==val);
+  // Seed brandStyles from defaults if not yet customised, so built-in styles are deletable
+  if(!brandStyles[brand]) brandStyles[brand] = [...(BRAND_STYLES[brand] || [])];
+  else {
+    (BRAND_STYLES[brand] || []).forEach(s => { if(!brandStyles[brand].includes(s)) brandStyles[brand].push(s); });
+  }
+  brandStyles[brand] = brandStyles[brand].filter(s => s !== val);
   saveOptions();
 }
 function deleteColor(val) { customColors=customColors.filter(v=>v!==val); saveOptions(); }
