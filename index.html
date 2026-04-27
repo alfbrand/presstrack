@@ -178,6 +178,31 @@
     .size-cell.has-qty .size-cell-label { color: var(--info-text); }
     .size-cell.has-qty .size-cell-sublabel { color: var(--info-text); opacity: 0.7; }
 
+
+    /* PRINT */
+    @media print {
+      #topbar, .tabs, #report-controls, button, select, input { display: none !important; }
+      body { background: white; color: black; }
+      .card { border: 1px solid #ccc; box-shadow: none; }
+      .rpt-section { page-break-inside: avoid; }
+    }
+    /* REPORT STYLES */
+    .rpt-section { margin-bottom: 2rem; }
+    .rpt-section h3 { font-size: 14px; font-weight: 600; margin-bottom: 0.75rem; color: var(--text); }
+    .rpt-kpi-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+    .rpt-kpi { background: var(--bg2); border-radius: var(--radius); padding: 14px 16px; }
+    .rpt-kpi-label { font-size: 11px; color: var(--text2); text-transform: uppercase; letter-spacing: .05em; margin-bottom: 4px; }
+    .rpt-kpi-val { font-size: 22px; font-weight: 700; }
+    .rpt-kpi-sub { font-size: 12px; color: var(--text2); margin-top: 2px; }
+    .rpt-bar-row { display: flex; align-items: center; gap: 10px; margin-bottom: 6px; font-size: 13px; }
+    .rpt-bar-label { width: 110px; flex-shrink: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; text-align: right; color: var(--text2); }
+    .rpt-bar-track { flex: 1; height: 10px; background: var(--bg3); border-radius: 5px; overflow: hidden; }
+    .rpt-bar-fill { height: 100%; border-radius: 5px; background: var(--text); transition: width .3s; }
+    .rpt-bar-count { width: 50px; flex-shrink: 0; font-weight: 600; font-size: 12px; color: var(--text); }
+    .rpt-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 1.5rem; }
+    @media (max-width: 600px) { .rpt-two-col { grid-template-columns: 1fr; } }
+    .rpt-empty { color: var(--text3); font-size: 13px; padding: 1rem 0; }
+
     /* VERSION BADGE */
     .version { font-size: 11px; color: var(--text3); }
   </style>
@@ -418,6 +443,24 @@
         </table>
       </div>
     </div>
+
+    <!-- ── REPORTS ── -->
+    <div id="tab-reports" style="display:none">
+      <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:1.5rem" id="report-controls">
+        <div class="field" style="flex:0 0 auto">
+          <span class="label">Month</span>
+          <input type="month" id="report-month" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="renderReports()">Run report</button>
+          <button class="btn" onclick="exportReportCSV()">Download CSV</button>
+          <button class="btn" onclick="printReport()">Print / Save PDF</button>
+        </div>
+      </div>
+      <div id="report-content">
+        <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a month and click Run report.</p>
+      </div>
+    </div>
   </div><!-- /main -->
 </div><!-- /app-shell -->
 
@@ -512,6 +555,20 @@
 
     <hr class="divider">
 
+    <!-- PREFERENCES -->
+    <p class="sub-label">Preferences</p>
+    <div class="field" style="margin-bottom:1rem;max-width:260px">
+      <span class="label">Low stock threshold</span>
+      <div style="display:flex;align-items:center;gap:8px">
+        <input type="number" id="low-threshold-input" min="1" max="99" value="5" style="width:70px;padding:8px 10px">
+        <span style="font-size:13px;color:var(--text2)">units or fewer = Low</span>
+      </div>
+      <span class="hint">Items at or below this qty show the "Low" badge.</span>
+    </div>
+    <button class="btn btn-sm btn-primary" onclick="saveThreshold()">Save threshold</button>
+
+    <hr class="divider">
+
     <!-- DATA -->
     <p class="sub-label">Data</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -528,7 +585,9 @@
 <script>
 // ── STATE ──────────────────────────────────────────────────────────
 let inventory = JSON.parse(localStorage.getItem('pt_inv')    || '[]');
+let lowThreshold = parseInt(localStorage.getItem('pt_low_threshold') || '5');
 let orderLog  = JSON.parse(localStorage.getItem('pt_log')    || '[]');
+let stockLog  = JSON.parse(localStorage.getItem('pt_slog')   || '[]');
 
 const DEFAULT_TYPES  = ['T-shirt','Hoodie','Long sleeve','Tank top','Tote bag','Hat','Sweatshirt'];
 const DEFAULT_BRANDS = ['Gildan','Bella+Canvas','Next Level','Comfort Colors','Hanes','AS Colour'];
@@ -556,7 +615,8 @@ function saveOptions() {
   localStorage.setItem('pt_bstyles', JSON.stringify(brandStyles));
 }
 function save()    { try { localStorage.setItem('pt_inv', JSON.stringify(inventory)); } catch(e){} }
-function saveLog() { try { localStorage.setItem('pt_log', JSON.stringify(orderLog));  } catch(e){} }
+function saveLog()   { try { localStorage.setItem('pt_log',  JSON.stringify(orderLog)); } catch(e){} }
+function saveStockLog() { try { localStorage.setItem('pt_slog', JSON.stringify(stockLog));  } catch(e){} }
 
 function getItem(t,b,st,c,s) { return inventory.find(i=>i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s); }
 function fmt(n) { return n!=null ? '$'+Number(n).toFixed(2) : '—'; }
@@ -596,9 +656,19 @@ function clearApiKey() {
   document.getElementById('api-key-input').value = '';
 }
 // ── CATALOG MANAGER ────────────────────────────────────────────────
+function saveThreshold() {
+  const val = parseInt(document.getElementById('low-threshold-input').value);
+  if(isNaN(val) || val < 1) { alert('Please enter a valid threshold (1 or more).'); return; }
+  lowThreshold = val;
+  localStorage.setItem('pt_low_threshold', val);
+  closeSettings();
+  updateStats(); renderTable();
+}
+
 function openSettings() {
   const key = localStorage.getItem('pt_api_key') || '';
   document.getElementById('api-key-input').value = key;
+  document.getElementById('low-threshold-input').value = lowThreshold;
   renderCatBrands();
   renderCatStyles();
   renderCatColors();
@@ -868,7 +938,7 @@ function catAdd(field) {
 
 // ── EXPORT / IMPORT ────────────────────────────────────────────────
 function exportData() {
-  const data = { inventory, orderLog, customTypes, customBrands, customColors, customShops, brandStyles, exportedAt: new Date().toISOString() };
+  const data = { inventory, orderLog, stockLog, customTypes, customBrands, customColors, customShops, brandStyles, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -885,12 +955,13 @@ function importData(e) {
       if(!confirm(`Import ${data.inventory.length} inventory items and ${(data.orderLog||[]).length} orders? This will replace your current data.`)) return;
       inventory    = data.inventory    || [];
       orderLog     = data.orderLog     || [];
+      stockLog     = data.stockLog     || [];
       customTypes  = data.customTypes  || [...DEFAULT_TYPES];
       customBrands = data.customBrands || [...DEFAULT_BRANDS];
       customColors = data.customColors || [...DEFAULT_COLORS];
       customShops  = data.customShops  || [];
       brandStyles  = data.brandStyles  || {};
-      save(); saveLog(); saveOptions();
+      save(); saveLog(); saveStockLog(); saveOptions();
       closeSettings();
       showTab('inventory');
       alert('Backup imported successfully!');
@@ -999,20 +1070,21 @@ function showTab(t) {
   document.querySelectorAll('[id^="tab-"]').forEach(el=>el.style.display='none');
   document.querySelectorAll('.tab').forEach((el,i)=>{
     el.classList.remove('active');
-    if(['inventory','add','press','log'][i]===t) el.classList.add('active');
+    if(['inventory','add','press','log','reports'][i]===t) el.classList.add('active');
   });
   document.getElementById('tab-'+t).style.display = 'block';
   if(t==='inventory') { updateStats(); updateFilters(); renderTable(); }
   if(t==='add')       { populateAddDropdowns(); if(addMode==='bulk') buildBulkGrid(); }
   if(t==='press')     populatePressDropdowns();
   if(t==='log')       { updateLogFilters(); renderLog(); }
+  if(t==='reports')   initReports();
 }
 
 // ── INVENTORY ──────────────────────────────────────────────────────
 function updateStats() {
   const total = inventory.reduce((s,i)=>s+i.qty, 0);
   const value = inventory.reduce((s,i)=>s+(i.cost!=null?i.qty*i.cost:0), 0);
-  const low   = inventory.filter(i=>i.qty>0&&i.qty<=5).length;
+  const low   = inventory.filter(i=>i.qty>0&&i.qty<=lowThreshold).length;
   document.getElementById('stat-total').textContent = total;
   document.getElementById('stat-skus').textContent  = inventory.length;
   document.getElementById('stat-value').textContent = '$'+value.toFixed(2);
@@ -1046,7 +1118,7 @@ function renderTable() {
   const tbody = document.getElementById('inv-body');
   if(!rows.length) { tbody.innerHTML=`<tr><td colspan="10" class="empty">No inventory yet — add stock to get started</td></tr>`; return; }
   tbody.innerHTML = rows.map(i=>{
-    const badge = i.qty===0?'<span class="badge badge-zero">Out</span>':i.qty<=5?'<span class="badge badge-low">Low</span>':'<span class="badge badge-ok">In stock</span>';
+    const badge = i.qty===0?'<span class="badge badge-zero">Out</span>':i.qty<=lowThreshold?'<span class="badge badge-low">Low</span>':'<span class="badge badge-ok">In stock</span>';
     const sv = i.cost!=null ? '$'+(i.qty*i.cost).toFixed(2) : '—';
     const e = v=>esc(v);
     return `<tr>
@@ -1077,6 +1149,10 @@ function adjustQty(t,b,st,c,s,delta) {
   item.qty=Math.max(0,item.qty+delta); save(); renderTable(); updateStats();
 }
 function removeItem(t,b,st,c,s) {
+  const item = inventory.find(i=>i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s);
+  if(!item) return;
+  const label = `${item.brand}${item.style?' '+item.style:''} ${item.color} ${item.size} (${item.type}) — ${item.qty} in stock`;
+  if(!confirm(`Remove this item?\n\n${label}\n\nThis cannot be undone.`)) return;
   inventory=inventory.filter(i=>!(i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s));
   save(); renderTable(); updateStats(); updateFilters();
 }
@@ -1213,6 +1289,17 @@ function addBulkStock() {
   });
 
   save(); updateFilters();
+  const now = new Date();
+  entries.forEach(({size, qty, cost}) => {
+    stockLog.unshift({
+      id: Date.now() + Math.random(),
+      isoDate: now.toISOString(),
+      date: now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+      type, brand, style:style||'', color, size, qty,
+      cost: cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null
+    });
+  });
+  saveStockLog();
   const totalQty = entries.reduce((s,e)=>s+e.qty, 0);
   const sizeList = entries.map(e=>`${e.size}×${e.qty}${e.cost!=null?' ($'+e.cost.toFixed(2)+')':''}`).join(', ');
   el.innerHTML=`<div class="alert alert-success">Added ${totalQty} units across ${added} size${added>1?'s':''} for ${brand}${style?' '+style:''} ${color} (${type}): ${sizeList}.</div>`;
@@ -1249,6 +1336,14 @@ function addStock() {
   if(existing) { existing.qty+=qty; if(cost!==null) existing.cost=cost; }
   else { inventory.push({type,brand,style:style||'',color,size,qty,cost}); }
   save(); updateFilters();
+  stockLog.unshift({
+    id: Date.now(),
+    isoDate: new Date().toISOString(),
+    date: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+    type, brand, style:style||'', color, size, qty,
+    cost: cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null
+  });
+  saveStockLog();
   el.innerHTML=`<div class="alert alert-success">Added ${qty}× ${brand}${style?' '+style:''} ${color} ${size} (${type})${cost!=null?' at $'+cost.toFixed(2)+'/unit':''}.</div>`;
   setTimeout(()=>el.innerHTML='', 3500);
 }
@@ -1389,6 +1484,264 @@ function clearLog() {
 
 // ── INIT ───────────────────────────────────────────────────────────
 updateStats(); updateFilters(); renderTable();
+
+// ── REPORTS ────────────────────────────────────────────────────────
+function initReports() {
+  const inp = document.getElementById('report-month');
+  if(!inp.value) {
+    const now = new Date();
+    inp.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  }
+  renderReports();
+}
+
+function parseMonth(monthVal) {
+  const [yr, mo] = monthVal.split('-').map(Number);
+  const start = new Date(yr, mo-1, 1);
+  const end   = new Date(yr, mo, 1);
+  return { start, end, label: start.toLocaleDateString('en-US',{month:'long',year:'numeric'}) };
+}
+
+function inRange(isoDate, start, end) {
+  const d = new Date(isoDate);
+  return d >= start && d < end;
+}
+
+function renderReports() {
+  const monthVal = document.getElementById('report-month').value;
+  if(!monthVal) return;
+  const { start, end, label } = parseMonth(monthVal);
+
+  const added   = stockLog.filter(e => inRange(e.isoDate, start, end));
+  const pressed = orderLog.filter(o => {
+    // orderLog stores date as locale string; parse via isoDate if present, else try date string
+    const d = o.isoDate ? new Date(o.isoDate) : new Date(o.date);
+    return d >= start && d < end;
+  });
+
+  const addedQty     = added.reduce((s,e)=>s+e.qty, 0);
+  const addedCost    = added.reduce((s,e)=>s+(e.totalCost??0), 0);
+  const pressedQty   = pressed.reduce((s,o)=>s+o.qty, 0);
+  const pressedCost  = pressed.reduce((s,o)=>s+(o.blankCost??0), 0);
+  const hasCosts     = added.some(e=>e.totalCost!=null) || pressed.some(o=>o.blankCost!=null);
+
+  // ── KPI cards ───────────────────────────────────────────────────
+  let html = `
+  <div id="report-printable">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
+    <h2 style="font-size:18px;font-weight:700">${label} — Monthly Report</h2>
+    <span style="font-size:12px;color:var(--text3)">Generated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+  </div>
+
+  <div class="rpt-kpi-row">
+    <div class="rpt-kpi">
+      <div class="rpt-kpi-label">Units purchased</div>
+      <div class="rpt-kpi-val">${addedQty}</div>
+      <div class="rpt-kpi-sub">${added.length} addition${added.length!==1?'s':''}</div>
+    </div>
+    <div class="rpt-kpi">
+      <div class="rpt-kpi-label">Blank cost (purchased)</div>
+      <div class="rpt-kpi-val">${hasCosts?'$'+addedCost.toFixed(2):'—'}</div>
+      <div class="rpt-kpi-sub">${addedQty>0&&addedCost>0?'$'+(addedCost/addedQty).toFixed(2)+' avg/unit':''}</div>
+    </div>
+    <div class="rpt-kpi">
+      <div class="rpt-kpi-label">Units pressed</div>
+      <div class="rpt-kpi-val">${pressedQty}</div>
+      <div class="rpt-kpi-sub">${pressed.length} order${pressed.length!==1?'s':''}</div>
+    </div>
+    <div class="rpt-kpi">
+      <div class="rpt-kpi-label">Blank cost (pressed)</div>
+      <div class="rpt-kpi-val">${hasCosts?'$'+pressedCost.toFixed(2):'—'}</div>
+      <div class="rpt-kpi-sub">${pressedQty>0&&pressedCost>0?'$'+(pressedCost/pressedQty).toFixed(2)+' avg/unit':''}</div>
+    </div>
+  </div>`;
+
+  // ── Purchased detail table ──────────────────────────────────────
+  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:auto">
+    <div style="padding:12px 14px;border-bottom:0.5px solid var(--border);font-weight:600;font-size:13px">Inventory purchased this month (${added.length} entries)</div>`;
+  if(added.length) {
+    html += `<table><thead><tr><th>Date</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Total cost</th></tr></thead><tbody>`;
+    added.forEach(e => {
+      html += `<tr><td>${e.date}</td><td>${e.type}</td><td>${e.brand}</td><td>${e.style||'—'}</td><td>${e.color}</td><td>${e.size}</td><td>${e.qty}</td><td>${e.cost!=null?'$'+e.cost.toFixed(2):'—'}</td><td>${e.totalCost!=null?'$'+e.totalCost.toFixed(2):'—'}</td></tr>`;
+    });
+    html += `<tr style="font-weight:600;background:var(--bg2)"><td colspan="6">Total</td><td>${addedQty}</td><td></td><td>${addedCost>0?'$'+addedCost.toFixed(2):'—'}</td></tr>`;
+    html += `</tbody></table>`;
+  } else {
+    html += `<p class="rpt-empty" style="padding:1rem 14px">No stock additions logged this month.</p>`;
+  }
+  html += `</div>`;
+
+  // ── Pressed detail table ────────────────────────────────────────
+  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:auto">
+    <div style="padding:12px 14px;border-bottom:0.5px solid var(--border);font-weight:600;font-size:13px">Orders pressed this month (${pressed.length} entries)</div>`;
+  if(pressed.length) {
+    html += `<table><thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th></tr></thead><tbody>`;
+    pressed.forEach(o => {
+      html += `<tr><td>${o.date}</td><td>${o.shop||'—'}</td><td>${o.orderNum||'—'}</td><td>${o.type}</td><td>${o.brand}</td><td>${o.style||'—'}</td><td>${o.color}</td><td>${o.size}</td><td>${o.qty}</td><td>${o.blankCost!=null?'$'+o.blankCost.toFixed(2):'—'}</td></tr>`;
+    });
+    html += `<tr style="font-weight:600;background:var(--bg2)"><td colspan="8">Total</td><td>${pressedQty}</td><td>${pressedCost>0?'$'+pressedCost.toFixed(2):'—'}</td></tr>`;
+    html += `</tbody></table>`;
+  } else {
+    html += `<p class="rpt-empty" style="padding:1rem 14px">No press orders logged this month.</p>`;
+  }
+  html += `</div>`;
+
+  // ── Dashboard: popularity from ALL-TIME order log ───────────────
+  html += `<div style="margin-bottom:0.5rem"><h3 style="font-size:15px;font-weight:700;margin-bottom:0.25rem">Popularity dashboard — all time</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:1rem">Based on total units pressed across all orders.</p></div>`;
+  html += `<div class="rpt-two-col">`;
+
+  const dash = [
+    { label:'Top brands',  key:'brand' },
+    { label:'Top colors',  key:'color' },
+    { label:'Top sizes',   key:'size'  },
+    { label:'Top types',   key:'type'  },
+    { label:'Top shops',   key:'shop'  },
+    { label:'Top styles',  key:'style' },
+  ];
+
+  dash.forEach(({label, key}) => {
+    const counts = {};
+    orderLog.forEach(o => {
+      const k = o[key] || '(none)';
+      counts[k] = (counts[k]||0) + o.qty;
+    });
+    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    const max = sorted[0]?.[1] || 1;
+    html += `<div class="rpt-section card"><div style="font-weight:600;font-size:13px;margin-bottom:10px">${label}</div>`;
+    if(!sorted.length) {
+      html += `<p class="rpt-empty">No data yet.</p>`;
+    } else {
+      sorted.forEach(([name, count]) => {
+        const pct = Math.round((count/max)*100);
+        html += `<div class="rpt-bar-row">
+          <div class="rpt-bar-label" title="${name}">${name}</div>
+          <div class="rpt-bar-track"><div class="rpt-bar-fill" style="width:${pct}%"></div></div>
+          <div class="rpt-bar-count">${count}</div>
+        </div>`;
+      });
+    }
+    html += `</div>`;
+  });
+
+  html += `</div></div>`; // close rpt-two-col + report-printable
+
+  document.getElementById('report-content').innerHTML = html;
+}
+
+// ── REPORT EXPORTS ─────────────────────────────────────────────────
+function printReport() {
+  const content = document.getElementById('report-printable');
+  if(!content) { alert('Run a report first.'); return; }
+  const win = window.open('', '_blank');
+  win.document.write(`<!DOCTYPE html><html><head><title>PressTrack Report</title>
+  <style>
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;font-size:13px;color:#1a1a18;padding:2rem;max-width:960px;margin:0 auto}
+    table{width:100%;border-collapse:collapse;font-size:12px;margin-bottom:1rem}
+    th{text-align:left;padding:7px 9px;background:#f5f5f4;border-bottom:1px solid #ddd;font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.04em}
+    td{padding:7px 9px;border-bottom:1px solid #eee}
+    h2{font-size:18px;margin-bottom:1rem} h3{font-size:14px;margin:1.5rem 0 0.5rem}
+    .kpi-row{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:1.5rem}
+    .kpi{background:#f5f5f4;border-radius:8px;padding:12px}
+    .kpi-label{font-size:11px;color:#666;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+    .kpi-val{font-size:20px;font-weight:700}
+    .kpi-sub{font-size:11px;color:#888;margin-top:2px}
+    .section{margin-bottom:1.5rem;border:1px solid #eee;border-radius:8px;overflow:hidden}
+    .section-title{padding:10px 14px;background:#f5f5f4;font-weight:600;font-size:13px;border-bottom:1px solid #eee}
+    .bar-row{display:flex;align-items:center;gap:8px;margin-bottom:5px;font-size:12px}
+    .bar-label{width:100px;text-align:right;color:#666;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+    .bar-track{flex:1;height:8px;background:#eee;border-radius:4px;overflow:hidden}
+    .bar-fill{height:100%;background:#1a1a18;border-radius:4px}
+    .bar-count{width:40px;font-weight:600}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:1rem}
+    .dash-card{border:1px solid #eee;border-radius:8px;padding:12px}
+    .dash-title{font-weight:600;font-size:13px;margin-bottom:8px}
+    .total-row{font-weight:700;background:#f5f5f4}
+    @media print{button{display:none}}
+  </style></head><body>`);
+
+  // KPI section
+  const monthVal = document.getElementById('report-month').value;
+  const { start, end, label } = parseMonth(monthVal);
+  const added   = stockLog.filter(e=>inRange(e.isoDate,start,end));
+  const pressed = orderLog.filter(o=>{ const d=o.isoDate?new Date(o.isoDate):new Date(o.date); return d>=start&&d<end; });
+  const addedQty=added.reduce((s,e)=>s+e.qty,0), addedCost=added.reduce((s,e)=>s+(e.totalCost??0),0);
+  const pressedQty=pressed.reduce((s,o)=>s+o.qty,0), pressedCost=pressed.reduce((s,o)=>s+(o.blankCost??0),0);
+
+  win.document.write(`<h2>${label} — Monthly Report</h2>
+  <p style="color:#888;font-size:12px;margin-bottom:1.5rem">Generated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</p>
+  <div class="kpi-row">
+    <div class="kpi"><div class="kpi-label">Units purchased</div><div class="kpi-val">${addedQty}</div><div class="kpi-sub">${added.length} additions</div></div>
+    <div class="kpi"><div class="kpi-label">Blank cost (purchased)</div><div class="kpi-val">${addedCost>0?'$'+addedCost.toFixed(2):'—'}</div><div class="kpi-sub">${addedQty>0&&addedCost>0?'$'+(addedCost/addedQty).toFixed(2)+' avg/unit':''}</div></div>
+    <div class="kpi"><div class="kpi-label">Units pressed</div><div class="kpi-val">${pressedQty}</div><div class="kpi-sub">${pressed.length} orders</div></div>
+    <div class="kpi"><div class="kpi-label">Blank cost (pressed)</div><div class="kpi-val">${pressedCost>0?'$'+pressedCost.toFixed(2):'—'}</div><div class="kpi-sub">${pressedQty>0&&pressedCost>0?'$'+(pressedCost/pressedQty).toFixed(2)+' avg/unit':''}</div></div>
+  </div>`);
+
+  // Purchased table
+  win.document.write(`<div class="section"><div class="section-title">Inventory purchased (${added.length})</div><table><thead><tr><th>Date</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Total</th></tr></thead><tbody>`);
+  added.forEach(e=>win.document.write(`<tr><td>${e.date}</td><td>${e.type}</td><td>${e.brand}</td><td>${e.style||'—'}</td><td>${e.color}</td><td>${e.size}</td><td>${e.qty}</td><td>${e.cost!=null?'$'+e.cost.toFixed(2):'—'}</td><td>${e.totalCost!=null?'$'+e.totalCost.toFixed(2):'—'}</td></tr>`));
+  win.document.write(`<tr class="total-row"><td colspan="6">Total</td><td>${addedQty}</td><td></td><td>${addedCost>0?'$'+addedCost.toFixed(2):'—'}</td></tr></tbody></table></div>`);
+
+  // Pressed table
+  win.document.write(`<div class="section"><div class="section-title">Orders pressed (${pressed.length})</div><table><thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th></tr></thead><tbody>`);
+  pressed.forEach(o=>win.document.write(`<tr><td>${o.date}</td><td>${o.shop||'—'}</td><td>${o.orderNum||'—'}</td><td>${o.type}</td><td>${o.brand}</td><td>${o.style||'—'}</td><td>${o.color}</td><td>${o.size}</td><td>${o.qty}</td><td>${o.blankCost!=null?'$'+o.blankCost.toFixed(2):'—'}</td></tr>`));
+  win.document.write(`<tr class="total-row"><td colspan="8">Total</td><td>${pressedQty}</td><td>${pressedCost>0?'$'+pressedCost.toFixed(2):'—'}</td></tr></tbody></table></div>`);
+
+  // Popularity dashboard
+  win.document.write(`<h3>Popularity dashboard — all time</h3><div class="two-col">`);
+  [['Top brands','brand'],['Top colors','color'],['Top sizes','size'],['Top types','type'],['Top shops','shop'],['Top styles','style']].forEach(([lbl,key])=>{
+    const counts={};
+    orderLog.forEach(o=>{ const k=o[key]||'(none)'; counts[k]=(counts[k]||0)+o.qty; });
+    const sorted=Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+    const max=sorted[0]?.[1]||1;
+    win.document.write(`<div class="dash-card"><div class="dash-title">${lbl}</div>`);
+    sorted.forEach(([name,count])=>win.document.write(`<div class="bar-row"><div class="bar-label" title="${name}">${name}</div><div class="bar-track"><div class="bar-fill" style="width:${Math.round(count/max*100)}%"></div></div><div class="bar-count">${count}</div></div>`));
+    win.document.write(`</div>`);
+  });
+  win.document.write(`</div>`);
+  win.document.write(`<script>window.onload=()=>window.print()<\/script></body></html>`);
+  win.document.close();
+}
+
+function exportReportCSV() {
+  const monthVal = document.getElementById('report-month').value;
+  if(!monthVal) { alert('Select a month first.'); return; }
+  const { start, end, label } = parseMonth(monthVal);
+  const added   = stockLog.filter(e=>inRange(e.isoDate,start,end));
+  const pressed = orderLog.filter(o=>{ const d=o.isoDate?new Date(o.isoDate):new Date(o.date); return d>=start&&d<end; });
+
+  const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
+  let csv = `PressTrack Monthly Report — ${label}\n\n`;
+
+  csv += 'INVENTORY PURCHASED\n';
+  csv += 'Date,Type,Brand,Style,Color,Size,Qty,Cost/unit,Total cost\n';
+  added.forEach(e => csv += [e.date,e.type,e.brand,e.style||'',e.color,e.size,e.qty,e.cost??'',e.totalCost??''].map(esc).join(',')+`\n`);
+  const aq=added.reduce((s,e)=>s+e.qty,0), ac=added.reduce((s,e)=>s+(e.totalCost??0),0);
+  csv += `,,,,,,${aq},,${ac>0?ac.toFixed(2):''}\n\n`;
+
+  csv += 'ORDERS PRESSED\n';
+  csv += 'Date,Shop,Order #,Type,Brand,Style,Color,Size,Qty,Blank cost\n';
+  pressed.forEach(o => csv += [o.date,o.shop||'',o.orderNum||'',o.type,o.brand,o.style||'',o.color,o.size,o.qty,o.blankCost??''].map(esc).join(',')+`\n`);
+  const pq=pressed.reduce((s,o)=>s+o.qty,0), pc=pressed.reduce((s,o)=>s+(o.blankCost??0),0);
+  csv += `,,,,,,,,${pq},${pc>0?pc.toFixed(2):''}\n\n`;
+
+  csv += 'POPULARITY DASHBOARD (ALL TIME)\n';
+  csv += 'Category,Name,Units pressed\n';
+  [['Brand','brand'],['Color','color'],['Size','size'],['Type','type'],['Shop','shop'],['Style','style']].forEach(([cat,key])=>{
+    const counts={};
+    orderLog.forEach(o=>{ const k=o[key]||'(none)'; counts[k]=(counts[k]||0)+o.qty; });
+    Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,10).forEach(([name,count])=>{
+      csv += [cat,name,count].map(esc).join(',')+`\n`;
+    });
+  });
+
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `presstrack-report-${monthVal}.csv`;
+  a.click();
+}
+
 </script>
 </body>
 </html>
