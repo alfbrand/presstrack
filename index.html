@@ -1,0 +1,913 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="theme-color" content="#ffffff">
+  <title>PressTrack</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="icon" type="image/png" href="icon-192.png">
+  <link rel="apple-touch-icon" href="icon-192.png">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --bg: #ffffff;
+      --bg2: #f5f5f4;
+      --bg3: #eeede9;
+      --text: #1a1a18;
+      --text2: #6b6b67;
+      --text3: #a8a8a4;
+      --border: rgba(0,0,0,0.12);
+      --border2: rgba(0,0,0,0.22);
+      --success-bg: #eaf3de; --success-text: #27500a;
+      --warn-bg: #faeeda; --warn-text: #633806;
+      --danger-bg: #fcebeb; --danger-text: #791f1f;
+      --info-bg: #e6f1fb; --info-text: #0c447c;
+      --radius: 8px; --radius-lg: 12px;
+      --font: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #1c1c1a; --bg2: #252523; --bg3: #2e2e2b;
+        --text: #f0efea; --text2: #a8a8a4; --text3: #6b6b67;
+        --border: rgba(255,255,255,0.1); --border2: rgba(255,255,255,0.2);
+        --success-bg: #173404; --success-text: #c0dd97;
+        --warn-bg: #412402; --warn-text: #FAC775;
+        --danger-bg: #501313; --danger-text: #F09595;
+        --info-bg: #042c53; --info-text: #85b7eb;
+      }
+    }
+
+    body { font-family: var(--font); background: var(--bg3); color: var(--text); min-height: 100vh; font-size: 15px; }
+
+    /* LAYOUT */
+    #app-shell { display: flex; flex-direction: column; min-height: 100vh; }
+    #topbar { background: var(--bg); border-bottom: 0.5px solid var(--border); padding: 0 1.5rem; display: flex; align-items: center; justify-content: space-between; height: 52px; position: sticky; top: 0; z-index: 100; }
+    #topbar h1 { font-size: 17px; font-weight: 600; letter-spacing: -0.02em; }
+    #topbar-right { display: flex; align-items: center; gap: 8px; }
+    #main { flex: 1; max-width: 1100px; width: 100%; margin: 0 auto; padding: 1.5rem; }
+
+    /* TABS */
+    .tabs { display: flex; border-bottom: 0.5px solid var(--border); margin-bottom: 1.5rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .tabs::-webkit-scrollbar { display: none; }
+    .tab { padding: 10px 16px; font-size: 14px; cursor: pointer; border: none; background: none; color: var(--text2); border-bottom: 2px solid transparent; margin-bottom: -0.5px; white-space: nowrap; font-family: var(--font); }
+    .tab.active { color: var(--text); border-bottom-color: var(--text); font-weight: 500; }
+    .tab:hover:not(.active) { color: var(--text); }
+
+    /* CARD */
+    .card { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; }
+
+    /* FORM */
+    .field { display: flex; flex-direction: column; gap: 5px; }
+    .label { font-size: 12px; color: var(--text2); font-weight: 500; }
+    input[type=text], input[type=number], input[type=password], select, textarea {
+      width: 100%; padding: 9px 11px; border: 0.5px solid var(--border2); border-radius: var(--radius);
+      background: var(--bg); color: var(--text); font-size: 14px; font-family: var(--font);
+      transition: border-color .15s;
+    }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: var(--text2); }
+    select:disabled { opacity: 0.45; cursor: not-allowed; }
+    textarea { resize: vertical; min-height: 100px; line-height: 1.6; }
+    .input-prefix { display: flex; align-items: center; border: 0.5px solid var(--border2); border-radius: var(--radius); overflow: hidden; background: var(--bg); }
+    .input-prefix span { padding: 9px 11px; font-size: 14px; color: var(--text2); border-right: 0.5px solid var(--border); background: var(--bg2); white-space: nowrap; }
+    .input-prefix input { border: none; border-radius: 0; flex: 1; }
+    .input-prefix input:focus { outline: none; }
+    .hint { font-size: 12px; color: var(--text3); margin-top: 2px; }
+    .new-entry-row { display: flex; gap: 6px; margin-top: 6px; align-items: center; }
+    .new-entry-row input { flex: 1; margin: 0; }
+    .new-entry-row button { padding: 9px 14px; white-space: nowrap; font-size: 13px; }
+
+    /* GRID */
+    .g2 { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .g3 { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; }
+    .g4 { display: grid; grid-template-columns: 1fr 1fr 1fr 1fr; gap: 12px; }
+    @media (max-width: 700px) {
+      .g4 { grid-template-columns: 1fr 1fr; }
+      .g3 { grid-template-columns: 1fr 1fr; }
+    }
+    @media (max-width: 480px) {
+      .g4, .g3, .g2 { grid-template-columns: 1fr; }
+    }
+
+    /* BUTTONS */
+    .btn { padding: 9px 18px; border: 0.5px solid var(--border2); border-radius: var(--radius); background: var(--bg); color: var(--text); font-size: 14px; cursor: pointer; font-weight: 500; font-family: var(--font); transition: background .12s; }
+    .btn:hover { background: var(--bg2); }
+    .btn:active { transform: scale(0.98); }
+    .btn-primary { background: var(--text); color: var(--bg); border-color: var(--text); }
+    .btn-primary:hover { opacity: 0.85; background: var(--text); }
+    .btn-danger { color: var(--danger-text); border-color: var(--danger-text); }
+    .btn-danger:hover { background: var(--danger-bg); }
+    .btn-sm { padding: 5px 11px; font-size: 12px; }
+    .btn-icon { padding: 6px 10px; font-size: 16px; border: 0.5px solid var(--border); border-radius: var(--radius); background: var(--bg); color: var(--text2); cursor: pointer; font-family: var(--font); }
+    .btn-icon:hover { background: var(--bg2); color: var(--text); }
+
+    /* STATS */
+    .stat-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin-bottom: 1.5rem; }
+    @media (max-width: 600px) { .stat-grid { grid-template-columns: repeat(2, 1fr); } }
+    .stat { background: var(--bg2); border-radius: var(--radius); padding: 14px; }
+    .stat-label { font-size: 12px; color: var(--text2); margin-bottom: 4px; }
+    .stat-val { font-size: 22px; font-weight: 600; }
+
+    /* BADGES */
+    .badge { display: inline-block; padding: 2px 9px; border-radius: 20px; font-size: 11px; font-weight: 600; }
+    .badge-ok   { background: var(--success-bg); color: var(--success-text); }
+    .badge-low  { background: var(--warn-bg);    color: var(--warn-text); }
+    .badge-zero { background: var(--danger-bg);  color: var(--danger-text); }
+    .shop-pill  { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 11px; font-weight: 600; background: var(--info-bg); color: var(--info-text); }
+    .style-tag  { display: inline-block; padding: 1px 7px; border-radius: 4px; font-size: 11px; font-weight: 500; background: var(--bg2); color: var(--text2); border: 0.5px solid var(--border); }
+
+    /* ALERTS */
+    .alert { padding: 11px 15px; border-radius: var(--radius); font-size: 13px; margin-bottom: 1rem; }
+    .alert-success { background: var(--success-bg); color: var(--success-text); }
+    .alert-error   { background: var(--danger-bg);  color: var(--danger-text); }
+    .alert-info    { background: var(--info-bg);    color: var(--info-text); }
+
+    /* TABLES */
+    .tbl-wrap { overflow-x: auto; border-radius: var(--radius-lg); border: 0.5px solid var(--border); background: var(--bg); }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { text-align: left; padding: 9px 10px; font-size: 11px; color: var(--text2); font-weight: 600; border-bottom: 0.5px solid var(--border); white-space: nowrap; background: var(--bg2); }
+    td { padding: 8px 10px; border-bottom: 0.5px solid var(--border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 160px; }
+    tr:last-child td { border-bottom: none; }
+    tr:hover td { background: var(--bg2); }
+
+    /* MISC */
+    .section-title { font-size: 15px; font-weight: 600; margin-bottom: 1rem; }
+    .sub-label { font-size: 11px; color: var(--text2); font-weight: 600; text-transform: uppercase; letter-spacing: .06em; margin-bottom: 10px; }
+    .divider { border: none; border-top: 0.5px solid var(--border); margin: 1.25rem 0; }
+    .filter-row { display: flex; gap: 8px; margin-bottom: 1rem; flex-wrap: wrap; }
+    .filter-row select { width: auto; flex: 1; min-width: 90px; }
+    .empty { text-align: center; padding: 3rem; color: var(--text3); font-size: 14px; }
+    .cost-input { width: 72px; padding: 4px 7px; border: 0.5px solid var(--border2); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 12px; text-align: right; font-family: var(--font); }
+    .qty-ctrl { display: flex; align-items: center; gap: 3px; }
+    .qty-btn { width: 24px; height: 24px; border: 0.5px solid var(--border2); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: var(--font); }
+    .qty-btn:hover { background: var(--bg2); }
+    .qty-val { min-width: 28px; text-align: center; font-size: 13px; }
+    .receipt-mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; background: var(--bg2); }
+    .cost-preview { background: var(--bg2); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; font-size: 13px; }
+
+    /* SETTINGS MODAL */
+    #settings-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: center; justify-content: center; padding: 1rem; }
+    #settings-overlay.open { display: flex; }
+    #settings-panel { background: var(--bg); border-radius: var(--radius-lg); padding: 1.5rem; width: 100%; max-width: 480px; border: 0.5px solid var(--border); }
+    #settings-panel h2 { font-size: 16px; font-weight: 600; margin-bottom: 1rem; }
+    .api-key-wrap { display: flex; gap: 8px; }
+    .api-key-wrap input { flex: 1; font-family: monospace; }
+
+    /* VERSION BADGE */
+    .version { font-size: 11px; color: var(--text3); }
+  </style>
+</head>
+<body>
+<div id="app-shell">
+  <div id="topbar">
+    <h1>PressTrack</h1>
+    <div id="topbar-right">
+      <span class="version">v1.0</span>
+      <button class="btn-icon" onclick="openSettings()" title="Settings">⚙</button>
+    </div>
+  </div>
+
+  <div id="main">
+    <!-- API KEY NOTICE -->
+    <div id="api-notice" class="alert alert-info" style="display:none;margin-bottom:1rem">
+      Receipt parsing needs an Anthropic API key. <a href="#" onclick="openSettings();return false;" style="color:inherit;font-weight:600">Add it in Settings →</a>
+    </div>
+
+    <div class="tabs">
+      <button class="tab active" onclick="showTab('inventory')">Inventory</button>
+      <button class="tab" onclick="showTab('add')">Add stock</button>
+      <button class="tab" onclick="showTab('receipt')">Import receipt</button>
+      <button class="tab" onclick="showTab('press')">Press order</button>
+      <button class="tab" onclick="showTab('log')">Order log</button>
+    </div>
+
+    <!-- ── INVENTORY ── -->
+    <div id="tab-inventory">
+      <div class="stat-grid">
+        <div class="stat"><div class="stat-label">Total units</div><div class="stat-val" id="stat-total">0</div></div>
+        <div class="stat"><div class="stat-label">SKUs tracked</div><div class="stat-val" id="stat-skus">0</div></div>
+        <div class="stat"><div class="stat-label">Stock value</div><div class="stat-val" id="stat-value">$0.00</div></div>
+        <div class="stat"><div class="stat-label">Low stock</div><div class="stat-val" id="stat-low">0</div></div>
+      </div>
+      <div class="filter-row">
+        <select id="filter-type"  onchange="renderTable()"><option value="">All types</option></select>
+        <select id="filter-brand" onchange="onFilterBrandChange()"><option value="">All brands</option></select>
+        <select id="filter-style" onchange="renderTable()"><option value="">All styles</option></select>
+        <select id="filter-color" onchange="renderTable()"><option value="">All colors</option></select>
+        <select id="filter-size"  onchange="renderTable()"><option value="">All sizes</option></select>
+      </div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Stock value</th><th>Status</th><th></th></tr></thead>
+          <tbody id="inv-body"></tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ── ADD STOCK ── -->
+    <div id="tab-add" style="display:none">
+      <div class="card">
+        <div class="section-title">Add or update stock</div>
+        <div id="add-alert"></div>
+        <p class="sub-label">Garment details</p>
+        <div class="g4" style="margin-bottom:12px">
+          <div class="field">
+            <span class="label">Stock type</span>
+            <select id="add-type" onchange="handleCombo('type')"></select>
+            <div class="new-entry-row" id="new-type-row" style="display:none">
+              <input type="text" id="new-type-input" placeholder="e.g. Hoodie">
+              <button class="btn" onclick="confirmNew('type')">Add</button>
+              <button class="btn" onclick="cancelNew('type')">✕</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">Brand</span>
+            <select id="add-brand"></select>
+            <div class="new-entry-row" id="new-brand-row" style="display:none">
+              <input type="text" id="new-brand-input" placeholder="e.g. Next Level">
+              <button class="btn" onclick="confirmNew('brand')">Add</button>
+              <button class="btn" onclick="cancelNew('brand')">✕</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">Style / SKU</span>
+            <select id="add-style" onchange="handleCombo('style')" disabled></select>
+            <div class="new-entry-row" id="new-style-row" style="display:none">
+              <input type="text" id="new-style-input" placeholder="e.g. 3001C">
+              <button class="btn" onclick="confirmNew('style')">Add</button>
+              <button class="btn" onclick="cancelNew('style')">✕</button>
+            </div>
+            <span class="hint" id="style-hint">Select a brand first</span>
+          </div>
+          <div class="field">
+            <span class="label">Color</span>
+            <select id="add-color" onchange="handleCombo('color')"></select>
+            <div class="new-entry-row" id="new-color-row" style="display:none">
+              <input type="text" id="new-color-input" placeholder="e.g. Heather Navy">
+              <button class="btn" onclick="confirmNew('color')">Add</button>
+              <button class="btn" onclick="cancelNew('color')">✕</button>
+            </div>
+          </div>
+        </div>
+        <div class="g3" style="margin-bottom:16px">
+          <div class="field">
+            <span class="label">Size</span>
+            <select id="add-size">
+              <option value="">Select size</option>
+              <option>XS</option><option>S</option><option>M</option><option>L</option>
+              <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>One size</option>
+            </select>
+          </div>
+          <div class="field">
+            <span class="label">Quantity to add</span>
+            <input type="number" id="add-qty" min="1" value="12">
+          </div>
+          <div class="field">
+            <span class="label">Cost per blank ($)</span>
+            <div class="input-prefix">
+              <span>$</span>
+              <input type="number" id="add-cost" min="0" step="0.01" placeholder="3.50">
+            </div>
+          </div>
+        </div>
+        <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Style is optional. Adding to an existing SKU adds qty and updates cost if provided.</p>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="addStock()">Add to inventory</button>
+          <button class="btn" onclick="clearAddForm()">Clear</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── RECEIPT ── -->
+    <div id="tab-receipt" style="display:none">
+      <div class="card">
+        <div class="section-title">Import from supplier receipt</div>
+        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Paste your receipt text below. Include type, brand, style, color, size, qty, and price if available — Claude will parse it automatically.</p>
+        <div id="receipt-alert"></div>
+        <div class="field" style="margin-bottom:12px">
+          <span class="label">Receipt text</span>
+          <textarea class="receipt-mono" id="receipt-text" placeholder="Example:&#10;T-shirt Bella+Canvas 3001C White S x24 @ $5.10&#10;T-shirt Bella+Canvas B6400 Black M x18 @ $5.50&#10;Hoodie Gildan 18500 Navy L x12 @ $9.00&#10;Tote bag natural One size x24 @ $2.50"></textarea>
+        </div>
+        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+          <button class="btn btn-primary" onclick="parseReceipt()">Parse &amp; import</button>
+          <span id="parse-indicator" style="display:none;font-size:13px;color:var(--text2)">Parsing with AI…</span>
+        </div>
+        <div id="receipt-preview" style="margin-top:1.25rem"></div>
+      </div>
+    </div>
+
+    <!-- ── PRESS ORDER ── -->
+    <div id="tab-press" style="display:none">
+      <div class="card">
+        <div class="section-title">Log a press order</div>
+        <div id="press-alert"></div>
+        <p class="sub-label">Order details</p>
+        <div class="g3" style="margin-bottom:12px">
+          <div class="field">
+            <span class="label">Shop name</span>
+            <select id="press-shop" onchange="handleCombo('shop')"></select>
+            <div class="new-entry-row" id="new-shop-row" style="display:none">
+              <input type="text" id="new-shop-input" placeholder="New shop name">
+              <button class="btn" onclick="confirmNew('shop')">Add</button>
+              <button class="btn" onclick="cancelNew('shop')">✕</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">Order #</span>
+            <input type="text" id="press-order-num" placeholder="e.g. 1042, ORD-209">
+          </div>
+          <div class="field">
+            <span class="label">Note</span>
+            <input type="text" id="press-note" placeholder="e.g. Rush, front only, 2-color">
+          </div>
+        </div>
+        <hr class="divider">
+        <p class="sub-label">Blank selection</p>
+        <div class="g4" style="margin-bottom:12px">
+          <div class="field">
+            <span class="label">Stock type</span>
+            <select id="press-type" onchange="updatePressType()"><option value="">Select type</option></select>
+          </div>
+          <div class="field">
+            <span class="label">Brand</span>
+            <select id="press-brand" onchange="updatePressBrand()"><option value="">Select brand</option></select>
+          </div>
+          <div class="field">
+            <span class="label">Style / SKU</span>
+            <select id="press-style" onchange="updatePressStyle()" disabled><option value="">Select style</option></select>
+            <span class="hint" id="press-style-hint">Select a brand first</span>
+          </div>
+          <div class="field">
+            <span class="label">Color</span>
+            <select id="press-color" onchange="updatePressColor()"><option value="">Select color</option></select>
+          </div>
+        </div>
+        <div class="g2" style="margin-bottom:12px;max-width:380px">
+          <div class="field">
+            <span class="label">Size</span>
+            <select id="press-size" onchange="showPressCost()"><option value="">Select size</option></select>
+          </div>
+          <div class="field">
+            <span class="label">Quantity pressed</span>
+            <input type="number" id="press-qty" min="1" value="1" oninput="showPressCost()">
+          </div>
+        </div>
+        <div id="press-cost-preview" class="cost-preview" style="display:none;max-width:380px">
+          <span style="color:var(--text2)">Blank cost for this order:</span>
+          <span id="press-cost-val" style="font-weight:600;margin-left:8px"></span>
+        </div>
+        <button class="btn btn-primary" onclick="pressOrder()">Deduct from inventory &amp; log order</button>
+      </div>
+    </div>
+
+    <!-- ── ORDER LOG ── -->
+    <div id="tab-log" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+        <div class="filter-row" style="margin-bottom:0;flex:1;min-width:0">
+          <select id="log-filter-shop" onchange="renderLog()"><option value="">All shops</option></select>
+          <select id="log-filter-type" onchange="renderLog()"><option value="">All types</option></select>
+        </div>
+        <button class="btn btn-danger btn-sm" onclick="clearLog()">Clear log</button>
+      </div>
+      <div id="log-stats" style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap"></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th><th>Note</th></tr></thead>
+          <tbody id="log-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </div><!-- /main -->
+</div><!-- /app-shell -->
+
+<!-- SETTINGS MODAL -->
+<div id="settings-overlay" onclick="closeSettingsIfOutside(event)">
+  <div id="settings-panel">
+    <h2>Settings</h2>
+    <div class="field" style="margin-bottom:1rem">
+      <span class="label">Anthropic API key</span>
+      <div class="api-key-wrap">
+        <input type="password" id="api-key-input" placeholder="sk-ant-...">
+        <button class="btn" onclick="toggleApiKeyVisible()">Show</button>
+      </div>
+      <span class="hint">Used only for AI receipt parsing. Stored locally in your browser — never sent anywhere except Anthropic's API.</span>
+    </div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="saveApiKey()">Save key</button>
+      <button class="btn btn-danger" onclick="clearApiKey()">Remove key</button>
+      <button class="btn" onclick="closeSettings()">Close</button>
+    </div>
+    <hr class="divider">
+    <p class="sub-label">Data</p>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-sm" onclick="exportData()">Export backup (JSON)</button>
+      <button class="btn btn-sm" onclick="document.getElementById('import-file').click()">Import backup</button>
+      <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
+    </div>
+    <p style="font-size:12px;color:var(--text2);margin-top:8px">Export saves all inventory and orders as a JSON file you can re-import any time.</p>
+    <hr class="divider">
+    <p style="font-size:12px;color:var(--text3);text-align:center">PressTrack v1.0 — built with Claude</p>
+  </div>
+</div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────────
+let inventory = JSON.parse(localStorage.getItem('pt_inv')    || '[]');
+let orderLog  = JSON.parse(localStorage.getItem('pt_log')    || '[]');
+
+const DEFAULT_TYPES  = ['T-shirt','Hoodie','Long sleeve','Tank top','Tote bag','Hat','Sweatshirt'];
+const DEFAULT_BRANDS = ['Gildan','Bella+Canvas','Next Level','Comfort Colors','Hanes','AS Colour'];
+const DEFAULT_COLORS = ['White','Black','Navy','Gray','Red','Royal Blue','Forest Green','Maroon','Sand','Natural'];
+const BRAND_STYLES   = {
+  'Bella+Canvas': ['3001C','3001CVC','3001Y','B6400','3413C','3005','3501C','3945','8804'],
+  'Gildan':       ['G5000','G640','G800','64000','18500','18600','5400','2000','64V00'],
+  'Next Level':   ['3600','3900','6210','6010','4600','9200','6051'],
+  'Comfort Colors':['1717','1566','4017','6014','9018','1535'],
+  'Hanes':        ['5280','5250','P170','4980','5586'],
+  'AS Colour':    ['5001','1001','4001','3001','2001','1007'],
+};
+
+let customTypes  = JSON.parse(localStorage.getItem('pt_types')   || 'null') || [...DEFAULT_TYPES];
+let customBrands = JSON.parse(localStorage.getItem('pt_brands')  || 'null') || [...DEFAULT_BRANDS];
+let customColors = JSON.parse(localStorage.getItem('pt_colors')  || 'null') || [...DEFAULT_COLORS];
+let customShops  = JSON.parse(localStorage.getItem('pt_shops')   || 'null') || [];
+let brandStyles  = JSON.parse(localStorage.getItem('pt_bstyles') || 'null') || {};
+
+function saveOptions() {
+  localStorage.setItem('pt_types',   JSON.stringify(customTypes));
+  localStorage.setItem('pt_brands',  JSON.stringify(customBrands));
+  localStorage.setItem('pt_colors',  JSON.stringify(customColors));
+  localStorage.setItem('pt_shops',   JSON.stringify(customShops));
+  localStorage.setItem('pt_bstyles', JSON.stringify(brandStyles));
+}
+function save()    { try { localStorage.setItem('pt_inv', JSON.stringify(inventory)); } catch(e){} }
+function saveLog() { try { localStorage.setItem('pt_log', JSON.stringify(orderLog));  } catch(e){} }
+
+function getItem(t,b,st,c,s) { return inventory.find(i=>i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s); }
+function fmt(n) { return n!=null ? '$'+Number(n).toFixed(2) : '—'; }
+function esc(v) { return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+function stylesForBrand(brand) {
+  const base   = BRAND_STYLES[brand] || [];
+  const custom = brandStyles[brand]  || [];
+  const fromInv = inventory.filter(i=>i.brand===brand).map(i=>i.style).filter(Boolean);
+  return [...new Set([...base,...custom,...fromInv])].sort();
+}
+
+// ── SETTINGS ───────────────────────────────────────────────────────
+function openSettings() {
+  const key = localStorage.getItem('pt_api_key') || '';
+  document.getElementById('api-key-input').value = key;
+  document.getElementById('settings-overlay').classList.add('open');
+}
+function closeSettings() { document.getElementById('settings-overlay').classList.remove('open'); }
+function closeSettingsIfOutside(e) { if(e.target.id==='settings-overlay') closeSettings(); }
+function toggleApiKeyVisible() {
+  const inp = document.getElementById('api-key-input');
+  const btn = inp.nextElementSibling;
+  if(inp.type==='password'){ inp.type='text'; btn.textContent='Hide'; }
+  else { inp.type='password'; btn.textContent='Show'; }
+}
+function saveApiKey() {
+  const val = document.getElementById('api-key-input').value.trim();
+  if(!val) { alert('Please enter an API key.'); return; }
+  localStorage.setItem('pt_api_key', val);
+  document.getElementById('api-notice').style.display = 'none';
+  closeSettings();
+  alert('API key saved!');
+}
+function clearApiKey() {
+  if(!confirm('Remove your API key?')) return;
+  localStorage.removeItem('pt_api_key');
+  document.getElementById('api-key-input').value = '';
+  checkApiNotice();
+}
+function checkApiNotice() {
+  const notice = document.getElementById('api-notice');
+  notice.style.display = localStorage.getItem('pt_api_key') ? 'none' : 'block';
+}
+
+// ── EXPORT / IMPORT ────────────────────────────────────────────────
+function exportData() {
+  const data = { inventory, orderLog, customTypes, customBrands, customColors, customShops, brandStyles, exportedAt: new Date().toISOString() };
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `presstrack-backup-${new Date().toISOString().slice(0,10)}.json`;
+  a.click();
+}
+function importData(e) {
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = function(ev) {
+    try {
+      const data = JSON.parse(ev.target.result);
+      if(!Array.isArray(data.inventory)) throw new Error('Invalid backup file');
+      if(!confirm(`Import ${data.inventory.length} inventory items and ${(data.orderLog||[]).length} orders? This will replace your current data.`)) return;
+      inventory    = data.inventory    || [];
+      orderLog     = data.orderLog     || [];
+      customTypes  = data.customTypes  || [...DEFAULT_TYPES];
+      customBrands = data.customBrands || [...DEFAULT_BRANDS];
+      customColors = data.customColors || [...DEFAULT_COLORS];
+      customShops  = data.customShops  || [];
+      brandStyles  = data.brandStyles  || {};
+      save(); saveLog(); saveOptions();
+      closeSettings();
+      showTab('inventory');
+      alert('Backup imported successfully!');
+    } catch(err) { alert('Could not read backup file: '+err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value = '';
+}
+
+// ── SELECT BUILDERS ────────────────────────────────────────────────
+function buildComboSelect(id, label, vals, cur) {
+  const el = document.getElementById(id); if(!el) return;
+  el.innerHTML = `<option value="">Select ${label}</option>` +
+    [...new Set(vals)].filter(Boolean).sort().map(v=>`<option value="${v}"${v===cur?' selected':''}>${v}</option>`).join('') +
+    `<option value="__new__">+ Add new…</option>`;
+}
+function buildSimpleSelect(id, label, vals, cur) {
+  const el = document.getElementById(id); if(!el) return;
+  el.innerHTML = `<option value="">Select ${label}</option>` +
+    [...new Set(vals)].filter(Boolean).sort().map(v=>`<option value="${v}"${v===cur?' selected':''}>${v}</option>`).join('');
+}
+function buildFilterSelect(id, allLabel, vals) {
+  const el = document.getElementById(id); if(!el) return;
+  const cur = el.value;
+  el.innerHTML = `<option value="">All ${allLabel}</option>` +
+    [...new Set(vals)].filter(Boolean).sort().map(v=>`<option${v===cur?' selected':''}>${v}</option>`).join('');
+}
+
+// ── COMBO HANDLERS ─────────────────────────────────────────────────
+function handleCombo(field) {
+  const map = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop' };
+  const sel = document.getElementById(map[field]);
+  if(!sel || sel.value !== '__new__') return;
+  sel.style.display = 'none'; sel.value = '';
+  document.getElementById(`new-${field}-row`).style.display = 'flex';
+  document.getElementById(`new-${field}-input`).focus();
+}
+function confirmNew(field) {
+  const map  = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop' };
+  const labs = { type:'type', brand:'brand', style:'style / SKU', color:'color', shop:'shop' };
+  const input = document.getElementById(`new-${field}-input`);
+  const val = input.value.trim(); if(!val) return;
+  if(field==='type'  && !customTypes.includes(val))  customTypes.push(val);
+  if(field==='brand' && !customBrands.includes(val)) customBrands.push(val);
+  if(field==='color' && !customColors.includes(val)) customColors.push(val);
+  if(field==='shop'  && !customShops.includes(val))  customShops.push(val);
+  if(field==='style') {
+    const brand = document.getElementById('add-brand').value;
+    if(brand && brand !== '__new__') {
+      if(!brandStyles[brand]) brandStyles[brand] = [];
+      if(!brandStyles[brand].includes(val)) brandStyles[brand].push(val);
+    }
+  }
+  saveOptions(); cancelNew(field);
+  if(field === 'style') {
+    const brand = document.getElementById('add-brand').value;
+    buildComboSelect('add-style', labs.style, stylesForBrand(brand), val);
+    document.getElementById('add-style').value = val;
+  } else {
+    const lists = { type:customTypes, brand:customBrands, color:customColors, shop:customShops };
+    buildComboSelect(map[field], labs[field], lists[field]||[], val);
+    document.getElementById(map[field]).value = val;
+    if(field === 'brand') onAddBrandChange();
+  }
+}
+function cancelNew(field) {
+  const map = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop' };
+  document.getElementById(`new-${field}-input`).value = '';
+  const sel = document.getElementById(map[field]);
+  if(sel) { sel.style.display = ''; sel.value = ''; }
+  document.getElementById(`new-${field}-row`).style.display = 'none';
+}
+
+function onAddBrandChange() {
+  const brand = document.getElementById('add-brand').value;
+  const styleEl = document.getElementById('add-style');
+  const hint = document.getElementById('style-hint');
+  if(!brand || brand === '__new__') {
+    styleEl.disabled = true;
+    styleEl.innerHTML = '<option value="">Select style</option>';
+    hint.textContent = 'Select a brand first';
+    return;
+  }
+  const styles = stylesForBrand(brand);
+  styleEl.disabled = false;
+  buildComboSelect('add-style', 'style / SKU', styles, '');
+  hint.textContent = styles.length ? `${styles.length} style${styles.length>1?'s':''} for ${brand}` : 'No styles yet — add one below';
+}
+
+function populateAddDropdowns() {
+  buildComboSelect('add-type',  'type',  customTypes,  '');
+  buildComboSelect('add-brand', 'brand', customBrands, '');
+  buildComboSelect('add-color', 'color', customColors, '');
+  document.getElementById('add-brand').onchange = function() {
+    handleCombo('brand');
+    if(this.value !== '__new__') onAddBrandChange();
+  };
+  const styleEl = document.getElementById('add-style');
+  styleEl.disabled = true;
+  styleEl.innerHTML = '<option value="">Select style</option>';
+  document.getElementById('style-hint').textContent = 'Select a brand first';
+}
+
+// ── TAB ROUTING ────────────────────────────────────────────────────
+function showTab(t) {
+  document.querySelectorAll('[id^="tab-"]').forEach(el=>el.style.display='none');
+  document.querySelectorAll('.tab').forEach((el,i)=>{
+    el.classList.remove('active');
+    if(['inventory','add','receipt','press','log'][i]===t) el.classList.add('active');
+  });
+  document.getElementById('tab-'+t).style.display = 'block';
+  if(t==='inventory') { updateStats(); updateFilters(); renderTable(); }
+  if(t==='add')       populateAddDropdowns();
+  if(t==='press')     populatePressDropdowns();
+  if(t==='log')       { updateLogFilters(); renderLog(); }
+}
+
+// ── INVENTORY ──────────────────────────────────────────────────────
+function updateStats() {
+  const total = inventory.reduce((s,i)=>s+i.qty, 0);
+  const value = inventory.reduce((s,i)=>s+(i.cost!=null?i.qty*i.cost:0), 0);
+  const low   = inventory.filter(i=>i.qty>0&&i.qty<=5).length;
+  document.getElementById('stat-total').textContent = total;
+  document.getElementById('stat-skus').textContent  = inventory.length;
+  document.getElementById('stat-value').textContent = '$'+value.toFixed(2);
+  document.getElementById('stat-low').textContent   = low;
+}
+function updateFilters() {
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  buildFilterSelect('filter-type',  'types',  inventory.map(i=>i.type));
+  buildFilterSelect('filter-brand', 'brands', inventory.map(i=>i.brand));
+  buildFilterSelect('filter-color', 'colors', inventory.map(i=>i.color));
+  const fs = document.getElementById('filter-size'), cur = fs?fs.value:'';
+  const sizes = [...new Set(inventory.map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
+  if(fs) fs.innerHTML = '<option value="">All sizes</option>'+sizes.map(s=>`<option${s===cur?' selected':''}>${s}</option>`).join('');
+  onFilterBrandChange(true);
+}
+function onFilterBrandChange(skipRender) {
+  const brand = document.getElementById('filter-brand').value;
+  const styles = brand ? stylesForBrand(brand) : [...new Set(inventory.map(i=>i.style).filter(Boolean))];
+  buildFilterSelect('filter-style', 'styles', styles);
+  if(!skipRender) renderTable();
+}
+function renderTable() {
+  const fb  = document.getElementById('filter-brand').value;
+  const fst = document.getElementById('filter-style').value;
+  const fc  = document.getElementById('filter-color').value;
+  const fs  = document.getElementById('filter-size').value;
+  const ft  = document.getElementById('filter-type').value;
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  let rows = inventory.filter(i=>(!ft||i.type===ft)&&(!fb||i.brand===fb)&&(!fst||i.style===fst)&&(!fc||i.color===fc)&&(!fs||i.size===fs));
+  rows.sort((a,b)=>a.type.localeCompare(b.type)||a.brand.localeCompare(b.brand)||(a.style||'').localeCompare(b.style||'')||a.color.localeCompare(b.color)||sizeOrder.indexOf(a.size)-sizeOrder.indexOf(b.size));
+  const tbody = document.getElementById('inv-body');
+  if(!rows.length) { tbody.innerHTML=`<tr><td colspan="10" class="empty">No inventory yet — add stock to get started</td></tr>`; return; }
+  tbody.innerHTML = rows.map(i=>{
+    const badge = i.qty===0?'<span class="badge badge-zero">Out</span>':i.qty<=5?'<span class="badge badge-low">Low</span>':'<span class="badge badge-ok">In stock</span>';
+    const sv = i.cost!=null ? '$'+(i.qty*i.cost).toFixed(2) : '—';
+    const e = v=>esc(v);
+    return `<tr>
+      <td title="${i.type}">${i.type}</td>
+      <td title="${i.brand}">${i.brand}</td>
+      <td><span class="style-tag">${i.style||'—'}</span></td>
+      <td title="${i.color}">${i.color}</td>
+      <td style="font-weight:600">${i.size}</td>
+      <td><div class="qty-ctrl">
+        <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',-1)">−</button>
+        <span class="qty-val">${i.qty}</span>
+        <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',1)">+</button>
+      </div></td>
+      <td><input class="cost-input" type="number" min="0" step="0.01" value="${i.cost!=null?i.cost:''}" placeholder="—" onchange="updateCost('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',this.value)"></td>
+      <td style="color:var(--text2)">${sv}</td>
+      <td>${badge}</td>
+      <td><button class="btn btn-danger btn-sm" onclick="removeItem('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">Remove</button></td>
+    </tr>`;
+  }).join('');
+}
+function updateCost(t,b,st,c,s,val) {
+  const item=getItem(t,b,st,c,s); if(!item) return;
+  const v=parseFloat(val); item.cost=isNaN(v)||val===''?null:Math.round(v*100)/100;
+  save(); updateStats(); renderTable();
+}
+function adjustQty(t,b,st,c,s,delta) {
+  const item=getItem(t,b,st,c,s); if(!item) return;
+  item.qty=Math.max(0,item.qty+delta); save(); renderTable(); updateStats();
+}
+function removeItem(t,b,st,c,s) {
+  inventory=inventory.filter(i=>!(i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s));
+  save(); renderTable(); updateStats(); updateFilters();
+}
+
+// ── ADD STOCK ──────────────────────────────────────────────────────
+function addStock() {
+  const type=document.getElementById('add-type').value;
+  const brand=document.getElementById('add-brand').value;
+  const style=document.getElementById('add-style').value;
+  const color=document.getElementById('add-color').value;
+  const size=document.getElementById('add-size').value;
+  const qty=parseInt(document.getElementById('add-qty').value)||0;
+  const costRaw=document.getElementById('add-cost').value;
+  const cost=costRaw!==''?Math.round(parseFloat(costRaw)*100)/100:null;
+  const el=document.getElementById('add-alert');
+  if(!type||!brand||!color||!size||qty<1) { el.innerHTML='<div class="alert alert-error">Please fill in type, brand, color, size, and a valid quantity.</div>'; return; }
+  if(style&&brand&&style!=='__new__') {
+    if(!brandStyles[brand]) brandStyles[brand]=[];
+    if(!brandStyles[brand].includes(style)) brandStyles[brand].push(style);
+    saveOptions();
+  }
+  const existing=getItem(type,brand,style||'',color,size);
+  if(existing) { existing.qty+=qty; if(cost!==null) existing.cost=cost; }
+  else { inventory.push({type,brand,style:style||'',color,size,qty,cost}); }
+  save(); updateFilters();
+  el.innerHTML=`<div class="alert alert-success">Added ${qty}× ${brand}${style?' '+style:''} ${color} ${size} (${type})${cost!=null?' at $'+cost.toFixed(2)+'/unit':''}.</div>`;
+  setTimeout(()=>el.innerHTML='', 3500);
+}
+function clearAddForm() {
+  ['add-type','add-color','add-size'].forEach(id=>document.getElementById(id).value='');
+  document.getElementById('add-brand').value='';
+  document.getElementById('add-qty').value='12';
+  document.getElementById('add-cost').value='';
+  const styleEl=document.getElementById('add-style');
+  styleEl.innerHTML='<option value="">Select style</option>'; styleEl.disabled=true;
+  document.getElementById('style-hint').textContent='Select a brand first';
+  ['type','brand','style','color'].forEach(f=>cancelNew(f));
+}
+
+// ── RECEIPT PARSING ────────────────────────────────────────────────
+async function parseReceipt() {
+  const text=document.getElementById('receipt-text').value.trim();
+  if(!text) { document.getElementById('receipt-alert').innerHTML='<div class="alert alert-error">Please paste some receipt text first.</div>'; return; }
+  const apiKey=localStorage.getItem('pt_api_key');
+  if(!apiKey) { document.getElementById('receipt-alert').innerHTML='<div class="alert alert-error">No API key set. Add one in ⚙ Settings to use receipt parsing.</div>'; return; }
+  document.getElementById('parse-indicator').style.display='inline';
+  document.getElementById('receipt-preview').innerHTML='';
+  document.getElementById('receipt-alert').innerHTML='';
+  try {
+    const res=await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
+      body:JSON.stringify({
+        model:'claude-sonnet-4-20250514', max_tokens:1400,
+        messages:[{role:'user',content:`Parse this supplier receipt and extract each line item. Return ONLY a JSON array, no markdown. Each object: {"type":"...","brand":"...","style":"...","color":"...","size":"...","qty":number,"cost":number_or_null}. type=garment type, style=model/SKU scoped to that brand (e.g. 3001C for Bella+Canvas, G5000 for Gildan), cost=per-unit price or null. Sizes: XS,S,M,L,XL,2XL,3XL,4XL,"One size". Receipt:\n\n${text}`}]
+      })
+    });
+    if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'API error'); }
+    const data=await res.json();
+    const raw=data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
+    const items=JSON.parse(raw);
+    if(!Array.isArray(items)||!items.length) throw new Error('No items found');
+    let html=`<p style="font-size:14px;font-weight:600;margin-bottom:10px">Parsed ${items.length} item${items.length>1?'s':''}:</p><div class="tbl-wrap" style="margin-bottom:12px"><table><thead><tr><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th></tr></thead><tbody>`;
+    items.forEach(i=>html+=`<tr><td>${i.type}</td><td>${i.brand}</td><td>${i.style||'—'}</td><td>${i.color}</td><td>${i.size}</td><td>${i.qty}</td><td>${i.cost!=null?fmt(i.cost):'—'}</td></tr>`);
+    html+=`</tbody></table></div><div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="importParsed(${encodeURIComponent(JSON.stringify(items))})">Import all</button><button class="btn" onclick="document.getElementById('receipt-preview').innerHTML=''">Cancel</button></div>`;
+    document.getElementById('receipt-preview').innerHTML=html;
+  } catch(e) {
+    document.getElementById('receipt-alert').innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`;
+  }
+  document.getElementById('parse-indicator').style.display='none';
+}
+function importParsed(encoded) {
+  const items=JSON.parse(decodeURIComponent(encoded)); let added=0;
+  items.forEach(i=>{
+    if(!i.type||!i.brand||!i.color||!i.size||!i.qty) return;
+    if(!customTypes.includes(i.type))  customTypes.push(i.type);
+    if(!customBrands.includes(i.brand)) customBrands.push(i.brand);
+    if(!customColors.includes(i.color)) customColors.push(i.color);
+    if(i.style&&i.brand) { if(!brandStyles[i.brand]) brandStyles[i.brand]=[]; if(!brandStyles[i.brand].includes(i.style)) brandStyles[i.brand].push(i.style); }
+    const existing=getItem(i.type,i.brand,i.style||'',i.color,i.size);
+    if(existing) { existing.qty+=i.qty; if(i.cost!=null) existing.cost=i.cost; }
+    else { inventory.push({type:i.type,brand:i.brand,style:i.style||'',color:i.color,size:i.size,qty:i.qty,cost:i.cost??null}); }
+    added++;
+  });
+  saveOptions(); save(); updateFilters();
+  document.getElementById('receipt-preview').innerHTML='';
+  document.getElementById('receipt-alert').innerHTML=`<div class="alert alert-success">Imported ${added} items into inventory.</div>`;
+  document.getElementById('receipt-text').value='';
+  setTimeout(()=>document.getElementById('receipt-alert').innerHTML='', 3000);
+}
+
+// ── PRESS ORDER ────────────────────────────────────────────────────
+function populatePressDropdowns() {
+  buildComboSelect('press-shop','shop',customShops,'');
+  document.getElementById('press-shop').onchange=function(){ handleCombo('shop'); };
+  buildSimpleSelect('press-type','type',[...new Set(inventory.map(i=>i.type))]);
+  ['press-brand','press-color','press-size'].forEach(id=>document.getElementById(id).innerHTML=`<option value="">Select ${id.replace('press-','')}</option>`);
+  const ps=document.getElementById('press-style'); ps.innerHTML='<option value="">Select style</option>'; ps.disabled=true;
+  document.getElementById('press-style-hint').textContent='Select a brand first';
+  document.getElementById('press-cost-preview').style.display='none';
+}
+function updatePressType() {
+  const type=document.getElementById('press-type').value;
+  buildSimpleSelect('press-brand','brand',[...new Set(inventory.filter(i=>i.type===type).map(i=>i.brand))]);
+  ['press-style','press-color','press-size'].forEach(id=>document.getElementById(id).innerHTML=`<option value="">Select ${id.replace('press-','')}</option>`);
+  const ps=document.getElementById('press-style'); ps.disabled=true;
+  document.getElementById('press-style-hint').textContent='Select a brand first';
+  document.getElementById('press-cost-preview').style.display='none';
+}
+function updatePressBrand() {
+  const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value;
+  const styles=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand).map(i=>i.style).filter(Boolean))].sort();
+  const ps=document.getElementById('press-style'), hint=document.getElementById('press-style-hint');
+  if(styles.length) { ps.disabled=false; buildSimpleSelect('press-style','style',styles); hint.textContent=`${styles.length} style${styles.length>1?'s':''} for ${brand}`; }
+  else { ps.disabled=true; ps.innerHTML='<option value="">No styles on record</option>'; hint.textContent='No styles for this brand in inventory'; }
+  buildSimpleSelect('press-color','color',[]);
+  document.getElementById('press-size').innerHTML='<option value="">Select size</option>';
+  document.getElementById('press-cost-preview').style.display='none';
+}
+function updatePressStyle() {
+  const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value, style=document.getElementById('press-style').value;
+  const colors=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style).map(i=>i.color))].sort();
+  buildSimpleSelect('press-color','color',colors);
+  document.getElementById('press-size').innerHTML='<option value="">Select size</option>';
+  document.getElementById('press-cost-preview').style.display='none';
+}
+function updatePressColor() {
+  const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value;
+  const style=document.getElementById('press-style').value, color=document.getElementById('press-color').value;
+  const sizeOrder=['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  const sizes=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style&&i.color===color).map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
+  document.getElementById('press-size').innerHTML='<option value="">Select size</option>'+sizes.map(s=>`<option>${s}</option>`).join('');
+  document.getElementById('press-cost-preview').style.display='none';
+}
+function showPressCost() {
+  const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value;
+  const style=document.getElementById('press-style').value, color=document.getElementById('press-color').value;
+  const size=document.getElementById('press-size').value, qty=parseInt(document.getElementById('press-qty').value)||0;
+  const preview=document.getElementById('press-cost-preview');
+  if(!type||!brand||!color||!size||!qty) { preview.style.display='none'; return; }
+  const item=getItem(type,brand,style,color,size);
+  if(!item) { preview.style.display='none'; return; }
+  preview.style.display='block';
+  document.getElementById('press-cost-val').textContent=item.cost!=null?`${fmt(item.cost)} × ${qty} = ${fmt(item.cost*qty)}`:'No cost set for this blank';
+}
+function pressOrder() {
+  const shop=document.getElementById('press-shop').value;
+  const orderNum=document.getElementById('press-order-num').value.trim();
+  const note=document.getElementById('press-note').value.trim();
+  const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value;
+  const style=document.getElementById('press-style').value, color=document.getElementById('press-color').value;
+  const size=document.getElementById('press-size').value, qty=parseInt(document.getElementById('press-qty').value)||0;
+  const el=document.getElementById('press-alert');
+  if(!type||!brand||!color||!size||qty<1) { el.innerHTML='<div class="alert alert-error">Select a type, brand, color, size, and quantity.</div>'; return; }
+  const item=getItem(type,brand,style,color,size);
+  if(!item) { el.innerHTML='<div class="alert alert-error">Item not found in inventory.</div>'; return; }
+  if(item.qty<qty) { el.innerHTML=`<div class="alert alert-error">Only ${item.qty} in stock — can't deduct ${qty}.</div>`; return; }
+  item.qty-=qty;
+  const blankCost=item.cost!=null?Math.round(item.cost*qty*100)/100:null;
+  orderLog.unshift({id:Date.now(),date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),shop:shop||'',orderNum,note,type,brand,style:style||'',color,size,qty,blankCost});
+  save(); saveLog();
+  if(shop&&!customShops.includes(shop)) { customShops.push(shop); saveOptions(); }
+  const costStr=blankCost!=null?` — blank cost: ${fmt(blankCost)}`:'';
+  el.innerHTML=`<div class="alert alert-success">Logged ${qty}× ${brand}${style?' '+style:''} ${color} ${size}${shop?' for '+shop:''}${orderNum?' #'+orderNum:''}${costStr}.</div>`;
+  setTimeout(()=>el.innerHTML='', 5000);
+  document.getElementById('press-order-num').value='';
+  document.getElementById('press-note').value='';
+  updatePressColor();
+  document.getElementById('press-cost-preview').style.display='none';
+}
+
+// ── ORDER LOG ──────────────────────────────────────────────────────
+function updateLogFilters() {
+  buildFilterSelect('log-filter-shop','shops',orderLog.map(o=>o.shop).filter(Boolean));
+  buildFilterSelect('log-filter-type','types',orderLog.map(o=>o.type));
+}
+function renderLog() {
+  const fs=document.getElementById('log-filter-shop').value, ft=document.getElementById('log-filter-type').value;
+  const rows=orderLog.filter(o=>(!fs||o.shop===fs)&&(!ft||o.type===ft));
+  const totalUnits=rows.reduce((s,o)=>s+o.qty,0);
+  const totalCost=rows.reduce((s,o)=>s+(o.blankCost!=null?o.blankCost:0),0);
+  const hasCost=rows.some(o=>o.blankCost!=null);
+  document.getElementById('log-stats').innerHTML=
+    `<div class="stat" style="padding:8px 14px"><div class="stat-label">Orders logged</div><div class="stat-val" style="font-size:17px">${rows.length}</div></div>`+
+    `<div class="stat" style="padding:8px 14px"><div class="stat-label">Units pressed</div><div class="stat-val" style="font-size:17px">${totalUnits}</div></div>`+
+    (hasCost?`<div class="stat" style="padding:8px 14px"><div class="stat-label">Total blank cost</div><div class="stat-val" style="font-size:17px">$${totalCost.toFixed(2)}</div></div>`:'');
+  const tbody=document.getElementById('log-body');
+  if(!rows.length) { tbody.innerHTML=`<tr><td colspan="11" class="empty">No orders logged yet</td></tr>`; return; }
+  tbody.innerHTML=rows.map(o=>`<tr>
+    <td style="color:var(--text2);font-size:12px">${o.date}</td>
+    <td>${o.shop?`<span class="shop-pill">${o.shop}</span>`:''}</td>
+    <td style="font-size:12px;color:var(--text2)">${o.orderNum||'—'}</td>
+    <td>${o.type}</td><td>${o.brand}</td>
+    <td><span class="style-tag">${o.style||'—'}</span></td>
+    <td>${o.color}</td><td style="font-weight:600">${o.size}</td><td style="font-weight:600">${o.qty}</td>
+    <td style="color:var(--text2)">${o.blankCost!=null?fmt(o.blankCost):'—'}</td>
+    <td style="white-space:normal;font-size:12px;color:var(--text2)">${o.note||''}</td>
+  </tr>`).join('');
+}
+function clearLog() {
+  if(!orderLog.length) return;
+  if(!confirm('Clear all logged orders? This cannot be undone.')) return;
+  orderLog=[]; saveLog(); updateLogFilters(); renderLog();
+}
+
+// ── INIT ───────────────────────────────────────────────────────────
+checkApiNotice();
+updateStats(); updateFilters(); renderTable();
+</script>
+</body>
+</html>
