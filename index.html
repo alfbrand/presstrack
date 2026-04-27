@@ -168,6 +168,17 @@
     .cat-brand-header { font-size: 12px; font-weight: 600; color: var(--text2); margin: 10px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
     .cat-empty { font-size: 13px; color: var(--text3); text-align: center; padding: 1rem; }
 
+    /* WATCH / REORDER */
+    .btn-watch { background: none; border: none; font-size: 16px; cursor: pointer; padding: 2px 4px; line-height: 1; opacity: 0.35; transition: opacity .15s, transform .15s; }
+    .btn-watch:hover { opacity: 0.7; transform: scale(1.15); }
+    .btn-watch.watching { opacity: 1; }
+    .reorder-panel { background: var(--warn-bg); border: 0.5px solid var(--warn-text); border-radius: var(--radius-lg); padding: 1rem 1.25rem; margin-bottom: 1.25rem; }
+    .reorder-panel h3 { font-size: 13px; font-weight: 700; color: var(--warn-text); margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+    .reorder-item { display: flex; align-items: center; justify-content: space-between; padding: 6px 0; border-bottom: 0.5px solid rgba(0,0,0,0.08); font-size: 13px; flex-wrap: wrap; gap: 6px; }
+    .reorder-item:last-child { border-bottom: none; padding-bottom: 0; }
+    .reorder-item-name { font-weight: 500; flex: 1; min-width: 180px; }
+    .reorder-item-qty { font-size: 12px; color: var(--warn-text); font-weight: 600; }
+
     /* BULK SIZE GRID */
     .size-cell { background: var(--bg2); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
     .size-cell-label { font-size: 12px; font-weight: 600; color: var(--text2); text-align: center; }
@@ -234,6 +245,7 @@
         <div class="stat"><div class="stat-label">Stock value</div><div class="stat-val" id="stat-value">$0.00</div></div>
         <div class="stat"><div class="stat-label">Low stock</div><div class="stat-val" id="stat-low">0</div></div>
       </div>
+      <div id="reorder-panel" style="display:none"></div>
       <div class="filter-row">
         <select id="filter-type"  onchange="renderTable()"><option value="">All types</option></select>
         <select id="filter-brand" onchange="onFilterBrandChange()"><option value="">All brands</option></select>
@@ -243,7 +255,7 @@
       </div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Stock value</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Stock value</th><th>Status</th><th title="Watch for reorder">🔔</th><th></th></tr></thead>
           <tbody id="inv-body"></tbody>
         </table>
       </div>
@@ -452,7 +464,13 @@
           <span class="label">Month</span>
           <input type="month" id="report-month" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <div class="field" style="flex:0 0 auto">
+          <span class="label">Shop</span>
+          <select id="report-shop" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);min-width:140px">
+            <option value="">All shops</option>
+          </select>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-end">
           <button class="btn btn-primary" onclick="renderReports()">Run report</button>
           <button class="btn" onclick="exportReportCSV()">Download CSV</button>
           <button class="btn" onclick="printReport()">Print / Save PDF</button>
@@ -1117,12 +1135,15 @@ function renderTable() {
   let rows = inventory.filter(i=>(!ft||i.type===ft)&&(!fb||i.brand===fb)&&(!fst||i.style===fst)&&(!fc||i.color===fc)&&(!fs||i.size===fs));
   rows.sort((a,b)=>a.type.localeCompare(b.type)||a.brand.localeCompare(b.brand)||(a.style||'').localeCompare(b.style||'')||a.color.localeCompare(b.color)||sizeOrder.indexOf(a.size)-sizeOrder.indexOf(b.size));
   const tbody = document.getElementById('inv-body');
-  if(!rows.length) { tbody.innerHTML=`<tr><td colspan="10" class="empty">No inventory yet — add stock to get started</td></tr>`; return; }
+  if(!rows.length) { tbody.innerHTML=`<tr><td colspan="11" class="empty">No inventory yet — add stock to get started</td></tr>`; return; }
   tbody.innerHTML = rows.map(i=>{
     const badge = i.qty===0?'<span class="badge badge-zero">Out</span>':i.qty<=lowThreshold?'<span class="badge badge-low">Low</span>':'<span class="badge badge-ok">In stock</span>';
     const sv = i.cost!=null ? '$'+(i.qty*i.cost).toFixed(2) : '—';
     const e = v=>esc(v);
-    return `<tr>
+    const watchClass = i.watch ? 'btn-watch watching' : 'btn-watch';
+    const watchIcon  = i.watch ? '🔔' : '🔕';
+    const watchTitle = i.watch ? 'Watching — click to stop' : 'Click to watch for reorder';
+    return `<tr${i.watch&&i.qty<=lowThreshold?' style="background:var(--warn-bg)"':''}>
       <td title="${i.type}">${i.type}</td>
       <td title="${i.brand}">${i.brand}</td>
       <td><span class="style-tag">${i.style||'—'}</span></td>
@@ -1136,10 +1157,42 @@ function renderTable() {
       <td><input class="cost-input" type="number" min="0" step="0.01" value="${i.cost!=null?i.cost:''}" placeholder="—" onchange="updateCost('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',this.value)"></td>
       <td style="color:var(--text2)">${sv}</td>
       <td>${badge}</td>
+      <td><button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">${watchIcon}</button></td>
       <td><button class="btn btn-danger btn-sm" onclick="removeItem('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">Remove</button></td>
     </tr>`;
   }).join('');
+  renderReorderPanel();
 }
+function toggleWatch(t,b,st,c,s) {
+  const item = getItem(t,b,st,c,s); if(!item) return;
+  item.watch = !item.watch;
+  save(); renderTable();
+}
+
+function renderReorderPanel() {
+  const panel = document.getElementById('reorder-panel');
+  if(!panel) return;
+  const watched = inventory.filter(i => i.watch && i.qty <= lowThreshold);
+  if(!watched.length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
+
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  watched.sort((a,b) => a.qty - b.qty || a.brand.localeCompare(b.brand));
+
+  let html = `<div class="reorder-panel">
+    <h3>🔔 Reorder needed — ${watched.length} SKU${watched.length>1?'s':''} low or out</h3>`;
+  watched.forEach(i => {
+    const statusText = i.qty === 0 ? 'OUT OF STOCK' : `${i.qty} left`;
+    const statusColor = i.qty === 0 ? 'var(--danger-text)' : 'var(--warn-text)';
+    html += `<div class="reorder-item">
+      <div class="reorder-item-name">${i.brand}${i.style?' <span class="style-tag">'+i.style+'</span>':''} ${i.color} ${i.size} <span style="color:var(--text2);font-weight:400;font-size:12px">(${i.type})</span></div>
+      <div class="reorder-item-qty" style="color:${statusColor}">${statusText}</div>
+    </div>`;
+  });
+  html += '</div>';
+  panel.innerHTML = html;
+  panel.style.display = 'block';
+}
+
 function updateCost(t,b,st,c,s,val) {
   const item=getItem(t,b,st,c,s); if(!item) return;
   const v=parseFloat(val); item.cost=isNaN(v)||val===''?null:Math.round(v*100)/100;
@@ -1148,6 +1201,7 @@ function updateCost(t,b,st,c,s,val) {
 function adjustQty(t,b,st,c,s,delta) {
   const item=getItem(t,b,st,c,s); if(!item) return;
   item.qty=Math.max(0,item.qty+delta); save(); renderTable(); updateStats();
+  // renderTable already calls renderReorderPanel
 }
 function removeItem(t,b,st,c,s) {
   const item = inventory.find(i=>i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s);
@@ -1493,6 +1547,12 @@ function initReports() {
     const now = new Date();
     inp.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   }
+  // Populate shop filter from all known shops
+  const shopSel = document.getElementById('report-shop');
+  const cur = shopSel.value;
+  const shops = [...new Set([...customShops, ...orderLog.map(o=>o.shop).filter(Boolean)])].sort();
+  shopSel.innerHTML = '<option value="">All shops</option>' +
+    shops.map(s=>`<option value="${s}"${s===cur?' selected':''}>${s}</option>`).join('');
   renderReports();
 }
 
@@ -1513,11 +1573,11 @@ function renderReports() {
   if(!monthVal) return;
   const { start, end, label } = parseMonth(monthVal);
 
+  const shopFilter = document.getElementById('report-shop').value;
   const added   = stockLog.filter(e => inRange(e.isoDate, start, end));
   const pressed = orderLog.filter(o => {
-    // orderLog stores date as locale string; parse via isoDate if present, else try date string
     const d = o.isoDate ? new Date(o.isoDate) : new Date(o.date);
-    return d >= start && d < end;
+    return d >= start && d < end && (!shopFilter || o.shop === shopFilter);
   });
 
   const addedQty     = added.reduce((s,e)=>s+e.qty, 0);
@@ -1527,10 +1587,11 @@ function renderReports() {
   const hasCosts     = added.some(e=>e.totalCost!=null) || pressed.some(o=>o.blankCost!=null);
 
   // ── KPI cards ───────────────────────────────────────────────────
+  const shopLabel = shopFilter ? ` · ${shopFilter}` : '';
   let html = `
   <div id="report-printable">
   <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
-    <h2 style="font-size:18px;font-weight:700">${label} — Monthly Report</h2>
+    <h2 style="font-size:18px;font-weight:700">${label}${shopLabel} — Monthly Report</h2>
     <span style="font-size:12px;color:var(--text3)">Generated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
   </div>
 
@@ -1559,7 +1620,7 @@ function renderReports() {
 
   // ── Purchased detail table ──────────────────────────────────────
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:auto">
-    <div style="padding:12px 14px;border-bottom:0.5px solid var(--border);font-weight:600;font-size:13px">Inventory purchased this month (${added.length} entries)</div>`;
+    <div style="padding:12px 14px;border-bottom:0.5px solid var(--border);font-weight:600;font-size:13px">Inventory purchased this month (${added.length} entries)${shopFilter?' <span style=\"font-size:11px;color:var(--text2);font-weight:400\"> — stock additions are not shop-specific</span>':''}</div>`;
   if(added.length) {
     html += `<table><thead><tr><th>Date</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Total cost</th></tr></thead><tbody>`;
     added.forEach(e => {
@@ -1663,13 +1724,15 @@ function printReport() {
 
   // KPI section
   const monthVal = document.getElementById('report-month').value;
+  const shopFilter = document.getElementById('report-shop').value;
   const { start, end, label } = parseMonth(monthVal);
   const added   = stockLog.filter(e=>inRange(e.isoDate,start,end));
-  const pressed = orderLog.filter(o=>{ const d=o.isoDate?new Date(o.isoDate):new Date(o.date); return d>=start&&d<end; });
+  const pressed = orderLog.filter(o=>{ const d=o.isoDate?new Date(o.isoDate):new Date(o.date); return d>=start&&d<end&&(!shopFilter||o.shop===shopFilter); });
   const addedQty=added.reduce((s,e)=>s+e.qty,0), addedCost=added.reduce((s,e)=>s+(e.totalCost??0),0);
   const pressedQty=pressed.reduce((s,o)=>s+o.qty,0), pressedCost=pressed.reduce((s,o)=>s+(o.blankCost??0),0);
+  const shopLabel = shopFilter ? ` · ${shopFilter}` : '';
 
-  win.document.write(`<h2>${label} — Monthly Report</h2>
+  win.document.write(`<h2>${label}${shopLabel} — Monthly Report</h2>
   <p style="color:#888;font-size:12px;margin-bottom:1.5rem">Generated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</p>
   <div class="kpi-row">
     <div class="kpi"><div class="kpi-label">Units purchased</div><div class="kpi-val">${addedQty}</div><div class="kpi-sub">${added.length} additions</div></div>
@@ -1708,11 +1771,13 @@ function exportReportCSV() {
   const monthVal = document.getElementById('report-month').value;
   if(!monthVal) { alert('Select a month first.'); return; }
   const { start, end, label } = parseMonth(monthVal);
+  const shopFilter = document.getElementById('report-shop').value;
   const added   = stockLog.filter(e=>inRange(e.isoDate,start,end));
-  const pressed = orderLog.filter(o=>{ const d=o.isoDate?new Date(o.isoDate):new Date(o.date); return d>=start&&d<end; });
+  const pressed = orderLog.filter(o=>{ const d=o.isoDate?new Date(o.isoDate):new Date(o.date); return d>=start&&d<end&&(!shopFilter||o.shop===shopFilter); });
 
   const esc = v => `"${String(v??'').replace(/"/g,'""')}"`;
-  let csv = `PressTrack Monthly Report — ${label}\n\n`;
+  const shopLabel = shopFilter ? ` · ${shopFilter}` : '';
+  let csv = `PressTrack Monthly Report — ${label}${shopLabel}\n\n`;
 
   csv += 'INVENTORY PURCHASED\n';
   csv += 'Date,Type,Brand,Style,Color,Size,Qty,Cost/unit,Total cost\n';
