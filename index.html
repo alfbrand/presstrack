@@ -607,18 +607,50 @@ function populateCatStyleBrandDropdowns() {
 function makeCatItem(label, onRename, onDelete) {
   const item = document.createElement('div');
   item.className = 'cat-item';
-  item.innerHTML = `
-    <span class="cat-item-label" title="${label}">${label}</span>
-    <button class="btn btn-sm" onclick="this.closest('.cat-item').querySelector('span').style.display='none';this.closest('.cat-item').querySelector('input').style.display='';this.closest('.cat-item').querySelector('input').focus();this.style.display='none';this.closest('.cat-item').querySelector('.cat-save').style.display='';">Rename</button>
-    <input type="text" value="${label}" style="display:none;font-size:13px;padding:4px 7px;flex:1" onkeydown="if(event.key==='Enter')this.closest('.cat-item').querySelector('.cat-save').click()">
-    <button class="btn btn-sm cat-save" style="display:none">Save</button>
-    <button class="btn btn-danger btn-sm">Delete</button>`;
-  item.querySelector('.cat-save').onclick = () => {
-    const newVal = item.querySelector('input').value.trim();
+
+  const span = document.createElement('span');
+  span.className = 'cat-item-label';
+  span.title = label;
+  span.textContent = label;
+
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.value = label;
+  input.style.cssText = 'display:none;font-size:13px;padding:4px 7px;flex:1';
+
+  const renameBtn = document.createElement('button');
+  renameBtn.className = 'btn btn-sm';
+  renameBtn.textContent = 'Rename';
+
+  const saveBtn = document.createElement('button');
+  saveBtn.className = 'btn btn-sm';
+  saveBtn.textContent = 'Save';
+  saveBtn.style.display = 'none';
+
+  const deleteBtn = document.createElement('button');
+  deleteBtn.className = 'btn btn-danger btn-sm';
+  deleteBtn.textContent = 'Delete';
+
+  renameBtn.onclick = () => {
+    span.style.display = 'none';
+    input.style.display = '';
+    input.focus();
+    renameBtn.style.display = 'none';
+    saveBtn.style.display = '';
+  };
+  input.onkeydown = (e) => { if(e.key==='Enter') saveBtn.click(); };
+  saveBtn.onclick = () => {
+    const newVal = input.value.trim();
     if(!newVal) return;
     onRename(newVal);
   };
-  item.querySelector('.btn-danger').onclick = onDelete;
+  deleteBtn.onclick = onDelete;
+
+  item.appendChild(span);
+  item.appendChild(renameBtn);
+  item.appendChild(input);
+  item.appendChild(saveBtn);
+  item.appendChild(deleteBtn);
   return item;
 }
 
