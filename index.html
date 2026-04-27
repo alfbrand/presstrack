@@ -169,6 +169,13 @@
     .cat-brand-header { font-size: 12px; font-weight: 600; color: var(--text2); margin: 10px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
     .cat-empty { font-size: 13px; color: var(--text3); text-align: center; padding: 1rem; }
 
+    /* BULK SIZE GRID */
+    .size-cell { background: var(--bg2); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
+    .size-cell-label { font-size: 12px; font-weight: 600; color: var(--text2); text-align: center; }
+    .size-cell input { text-align: center; padding: 6px; font-size: 15px; font-weight: 500; }
+    .size-cell.has-qty { background: var(--info-bg); }
+    .size-cell.has-qty .size-cell-label { color: var(--info-text); }
+
     /* VERSION BADGE */
     .version { font-size: 11px; color: var(--text3); }
   </style>
@@ -223,8 +230,16 @@
     <!-- ── ADD STOCK ── -->
     <div id="tab-add" style="display:none">
       <div class="card">
-        <div class="section-title">Add or update stock</div>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+          <div class="section-title" style="margin:0">Add or update stock</div>
+          <div style="display:flex;gap:0;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+            <button id="mode-single-btn" class="btn" style="border:none;border-radius:0;padding:7px 14px;font-size:13px;background:var(--text);color:var(--bg)" onclick="setAddMode('single')">Single entry</button>
+            <button id="mode-bulk-btn"   class="btn" style="border:none;border-radius:0;padding:7px 14px;font-size:13px;border-left:0.5px solid var(--border2)" onclick="setAddMode('bulk')">Size run (bulk)</button>
+          </div>
+        </div>
         <div id="add-alert"></div>
+
+        <!-- Shared garment selectors -->
         <p class="sub-label">Garment details</p>
         <div class="g4" style="margin-bottom:12px">
           <div class="field">
@@ -265,32 +280,63 @@
             </div>
           </div>
         </div>
-        <div class="g3" style="margin-bottom:16px">
-          <div class="field">
-            <span class="label">Size</span>
-            <select id="add-size">
-              <option value="">Select size</option>
-              <option>XS</option><option>S</option><option>M</option><option>L</option>
-              <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>One size</option>
-            </select>
-          </div>
-          <div class="field">
-            <span class="label">Quantity to add</span>
-            <input type="number" id="add-qty" min="1" value="12">
-          </div>
-          <div class="field">
-            <span class="label">Cost per blank ($)</span>
-            <div class="input-prefix">
-              <span>$</span>
-              <input type="number" id="add-cost" min="0" step="0.01" placeholder="3.50">
+
+        <!-- SINGLE ENTRY MODE -->
+        <div id="add-mode-single">
+          <div class="g3" style="margin-bottom:16px">
+            <div class="field">
+              <span class="label">Size</span>
+              <select id="add-size">
+                <option value="">Select size</option>
+                <option>XS</option><option>S</option><option>M</option><option>L</option>
+                <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>One size</option>
+              </select>
+            </div>
+            <div class="field">
+              <span class="label">Quantity to add</span>
+              <input type="number" id="add-qty" min="1" value="12">
+            </div>
+            <div class="field">
+              <span class="label">Cost per blank ($)</span>
+              <div class="input-prefix">
+                <span>$</span>
+                <input type="number" id="add-cost" min="0" step="0.01" placeholder="3.50">
+              </div>
             </div>
           </div>
+          <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Style is optional. Adding to an existing SKU adds qty and updates cost if provided.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="addStock()">Add to inventory</button>
+            <button class="btn" onclick="clearAddForm()">Clear</button>
+          </div>
         </div>
-        <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Style is optional. Adding to an existing SKU adds qty and updates cost if provided.</p>
-        <div style="display:flex;gap:8px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="addStock()">Add to inventory</button>
-          <button class="btn" onclick="clearAddForm()">Clear</button>
+
+        <!-- BULK / SIZE RUN MODE -->
+        <div id="add-mode-bulk" style="display:none">
+          <hr class="divider" style="margin-top:0">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+            <p class="sub-label" style="margin:0">Size run — enter qty per size</p>
+            <div style="display:flex;gap:6px;align-items:center">
+              <span style="font-size:12px;color:var(--text2)">Fill all sizes with:</span>
+              <input type="number" id="bulk-fill-val" min="1" placeholder="12" style="width:60px;padding:5px 7px;font-size:13px">
+              <button class="btn btn-sm" onclick="bulkFillAll()">Fill</button>
+            </div>
+          </div>
+          <div id="bulk-size-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-bottom:14px"></div>
+          <div class="field" style="max-width:200px;margin-bottom:16px">
+            <span class="label">Cost per blank ($) — applies to all sizes</span>
+            <div class="input-prefix">
+              <span>$</span>
+              <input type="number" id="bulk-cost" min="0" step="0.01" placeholder="3.50">
+            </div>
+          </div>
+          <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Leave a size blank to skip it. Adds to existing qty if the SKU already exists.</p>
+          <div style="display:flex;gap:8px;flex-wrap:wrap">
+            <button class="btn btn-primary" onclick="addBulkStock()">Add size run to inventory</button>
+            <button class="btn" onclick="clearAddForm()">Clear</button>
+          </div>
         </div>
+
       </div>
     </div>
 
@@ -985,7 +1031,7 @@ function showTab(t) {
   });
   document.getElementById('tab-'+t).style.display = 'block';
   if(t==='inventory') { updateStats(); updateFilters(); renderTable(); }
-  if(t==='add')       populateAddDropdowns();
+  if(t==='add')       { populateAddDropdowns(); if(addMode==='bulk') buildBulkGrid(); }
   if(t==='press')     populatePressDropdowns();
   if(t==='log')       { updateLogFilters(); renderLog(); }
 }
@@ -1064,6 +1110,110 @@ function removeItem(t,b,st,c,s) {
 }
 
 // ── ADD STOCK ──────────────────────────────────────────────────────
+// ── ADD MODE TOGGLE ────────────────────────────────────────────────
+const SIZES = ['XS','S','M','L','XL','2XL','3XL','4XL'];
+let addMode = 'single';
+
+function setAddMode(mode) {
+  addMode = mode;
+  const isBulk = mode === 'bulk';
+  document.getElementById('add-mode-single').style.display = isBulk ? 'none' : '';
+  document.getElementById('add-mode-bulk').style.display   = isBulk ? '' : 'none';
+  const singleBtn = document.getElementById('mode-single-btn');
+  const bulkBtn   = document.getElementById('mode-bulk-btn');
+  singleBtn.style.background = isBulk ? '' : 'var(--text)';
+  singleBtn.style.color      = isBulk ? '' : 'var(--bg)';
+  bulkBtn.style.background   = isBulk ? 'var(--text)' : '';
+  bulkBtn.style.color        = isBulk ? 'var(--bg)' : '';
+  if(isBulk) buildBulkGrid();
+}
+
+function buildBulkGrid() {
+  const grid = document.getElementById('bulk-size-grid');
+  grid.innerHTML = '';
+  SIZES.forEach(size => {
+    const cell = document.createElement('div');
+    cell.className = 'size-cell';
+    cell.id = `bulk-cell-${size}`;
+
+    const label = document.createElement('div');
+    label.className = 'size-cell-label';
+    label.textContent = size;
+
+    const input = document.createElement('input');
+    input.type = 'number';
+    input.min = '0';
+    input.placeholder = '0';
+    input.id = `bulk-qty-${size}`;
+    input.oninput = () => {
+      const hasVal = parseInt(input.value) > 0;
+      cell.classList.toggle('has-qty', hasVal);
+    };
+
+    cell.appendChild(label);
+    cell.appendChild(input);
+    grid.appendChild(cell);
+  });
+}
+
+function bulkFillAll() {
+  const val = document.getElementById('bulk-fill-val').value;
+  if(!val || parseInt(val) < 1) return;
+  SIZES.forEach(size => {
+    const input = document.getElementById(`bulk-qty-${size}`);
+    if(input) {
+      input.value = val;
+      document.getElementById(`bulk-cell-${size}`).classList.add('has-qty');
+    }
+  });
+}
+
+function addBulkStock() {
+  const type  = document.getElementById('add-type').value;
+  const brand = document.getElementById('add-brand').value;
+  const style = document.getElementById('add-style').value;
+  const color = document.getElementById('add-color').value;
+  const costRaw = document.getElementById('bulk-cost').value;
+  const cost = costRaw !== '' ? Math.round(parseFloat(costRaw)*100)/100 : null;
+  const el = document.getElementById('add-alert');
+
+  if(!type||!brand||!color) { el.innerHTML='<div class="alert alert-error">Please select type, brand, and color first.</div>'; return; }
+
+  const entries = SIZES.map(size => ({
+    size,
+    qty: parseInt(document.getElementById(`bulk-qty-${size}`)?.value)||0
+  })).filter(e => e.qty > 0);
+
+  if(!entries.length) { el.innerHTML='<div class="alert alert-error">Enter a quantity for at least one size.</div>'; return; }
+
+  if(style && brand && style !== '__new__') {
+    if(!brandStyles[brand]) brandStyles[brand]=[];
+    if(!brandStyles[brand].includes(style)) brandStyles[brand].push(style);
+    saveOptions();
+  }
+
+  let added = 0;
+  entries.forEach(({size, qty}) => {
+    const existing = getItem(type, brand, style||''', color, size);
+    if(existing) { existing.qty += qty; if(cost !== null) existing.cost = cost; }
+    else { inventory.push({type, brand, style:style||'', color, size, qty, cost}); }
+    added++;
+  });
+
+  save(); updateFilters();
+  const totalQty = entries.reduce((s,e)=>s+e.qty, 0);
+  const sizeList = entries.map(e=>`${e.size}×${e.qty}`).join(', ');
+  el.innerHTML=`<div class="alert alert-success">Added ${totalQty} units across ${added} size${added>1?'s':''} for ${brand}${style?' '+style:'' } ${color} (${type}): ${sizeList}${cost!=null?' at $'+cost.toFixed(2)+'/unit':''}.</div>`;
+  setTimeout(()=>el.innerHTML='', 5000);
+
+  // Clear qty fields but keep garment selection for quick color/style variants
+  SIZES.forEach(size => {
+    const input = document.getElementById(`bulk-qty-${size}`);
+    if(input) { input.value=''; document.getElementById(`bulk-cell-${size}`).classList.remove('has-qty'); }
+  });
+  document.getElementById('bulk-fill-val').value='';
+}
+
 function addStock() {
   const type=document.getElementById('add-type').value;
   const brand=document.getElementById('add-brand').value;
@@ -1087,15 +1237,22 @@ function addStock() {
   el.innerHTML=`<div class="alert alert-success">Added ${qty}× ${brand}${style?' '+style:''} ${color} ${size} (${type})${cost!=null?' at $'+cost.toFixed(2)+'/unit':''}.</div>`;
   setTimeout(()=>el.innerHTML='', 3500);
 }
+
 function clearAddForm() {
   ['add-type','add-color','add-size'].forEach(id=>document.getElementById(id).value='');
   document.getElementById('add-brand').value='';
   document.getElementById('add-qty').value='12';
   document.getElementById('add-cost').value='';
+  document.getElementById('bulk-cost').value='';
   const styleEl=document.getElementById('add-style');
   styleEl.innerHTML='<option value="">Select style</option>'; styleEl.disabled=true;
   document.getElementById('style-hint').textContent='Select a brand first';
   ['type','brand','style','color'].forEach(f=>cancelNew(f));
+  SIZES.forEach(size => {
+    const input = document.getElementById(`bulk-qty-${size}`);
+    if(input) { input.value=''; document.getElementById(`bulk-cell-${size}`)?.classList.remove('has-qty'); }
+  });
+  document.getElementById('bulk-fill-val').value='';
 }
 
 // ── RECEIPT PARSING ────────────────────────────────────────────────
