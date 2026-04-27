@@ -392,7 +392,7 @@
           <div style="background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
             <strong style="color:var(--text);display:block;margin-bottom:6px">Required columns:</strong>
             type, brand, style, color, size, qty, cost<br>
-            <span style="color:var(--text3);margin-top:4px;display:block">size must be one of: XS, S, M, L, XL, 2XL, 3XL, 4XL, One size &nbsp;·&nbsp; cost is per blank in dollars (leave blank if unknown) &nbsp;·&nbsp; style is optional</span>
+            <span style="color:var(--text3);margin-top:4px;display:block">size must be one of: XS, S, M, L, XL, 2XL, 3XL, 4XL, One size &nbsp;·&nbsp; cost is per blank in dollars &nbsp;·&nbsp; date_added format: YYYY-MM-DD (leave blank to use today) &nbsp;·&nbsp; style is optional</span>
           </div>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
@@ -1719,17 +1719,17 @@ function clearLog() {
 }
 
 // ── CSV IMPORT ─────────────────────────────────────────────────────
-const CSV_TEMPLATE_HEADERS = ['type','brand','style','color','size','qty','cost'];
+const CSV_TEMPLATE_HEADERS = ['type','brand','style','color','size','qty','cost','date_added'];
 const CSV_VALID_SIZES = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
 
 function downloadCSVTemplate() {
   const rows = [
     CSV_TEMPLATE_HEADERS,
-    ['T-shirt','Bella+Canvas','3001C','White','S','24','5.10'],
-    ['T-shirt','Bella+Canvas','3001C','White','M','36','5.10'],
-    ['T-shirt','Gildan','G5000','Black','L','24','3.25'],
-    ['Hoodie','Gildan','18500','Navy','XL','12','9.00'],
-    ['Tote bag','','','Natural','One size','24',''],
+    ['T-shirt','Bella+Canvas','3001C','White','S','24','5.10','2025-03-01'],
+    ['T-shirt','Bella+Canvas','3001C','White','M','36','5.10','2025-03-01'],
+    ['T-shirt','Gildan','G5000','Black','L','24','3.25','2025-03-15'],
+    ['Hoodie','Gildan','18500','Navy','XL','12','9.00','2025-04-01'],
+    ['Tote bag','','','Natural','One size','24','',''],
   ];
   const esc = v => '"' + String(v).replace(/"/g, '""') + '"';
   const csv = rows.map(r => r.map(esc).join(',')).join('\n');
@@ -1802,6 +1802,13 @@ function handleCSVFile(event) {
         const qty   = parseInt(row.qty);
         const costRaw = row.cost || '';
         const cost  = costRaw !== '' ? parseFloat(costRaw) : null;
+        const dateRaw = (row.date_added || '').trim();
+        let parsedDate = null;
+        if(dateRaw) {
+          const d = new Date(dateRaw + 'T12:00:00');
+          if(isNaN(d.getTime())) { errors.push(`Row ${lineNum}: invalid date_added "${dateRaw}" — use YYYY-MM-DD format`); return; }
+          parsedDate = d;
+        }
 
         if(!type)  { errors.push(`Row ${lineNum}: missing type`); return; }
         if(!brand) { errors.push(`Row ${lineNum}: missing brand`); return; }
@@ -1811,7 +1818,7 @@ function handleCSVFile(event) {
         if(!CSV_VALID_SIZES.includes(size)) { errors.push(`Row ${lineNum}: invalid size "${size}" — must be one of ${CSV_VALID_SIZES.join(', ')}`); return; }
         if(cost !== null && isNaN(cost)) { errors.push(`Row ${lineNum}: invalid cost "${costRaw}"`); return; }
 
-        valid.push({ type, brand, style, color, size, qty, cost: cost !== null ? Math.round(cost*100)/100 : null });
+        valid.push({ type, brand, style, color, size, qty, cost: cost !== null ? Math.round(cost*100)/100 : null, parsedDate });
       });
 
       renderCSVPreview(valid, errors);
@@ -1851,13 +1858,14 @@ function renderCSVPreview(valid, errors) {
   </div>`;
 
   html += `<div class="tbl-wrap" style="margin-bottom:14px"><table>
-    <thead><tr><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Status</th></tr></thead><tbody>`;
+    <thead><tr><th>Date added</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Status</th></tr></thead><tbody>`;
   valid.forEach(r => {
     const exists = getItem(r.type, r.brand, r.style, r.color, r.size);
     const status = exists
       ? `<span class="badge badge-low">Update +${r.qty} (now ${exists.qty+r.qty})</span>`
       : `<span class="badge badge-ok">New</span>`;
-    html += `<tr><td>${r.type}</td><td>${r.brand}</td><td>${r.style||'—'}</td><td>${r.color}</td><td>${r.size}</td><td>${r.qty}</td><td>${r.cost!=null?'$'+r.cost.toFixed(2):'—'}</td><td>${status}</td></tr>`;
+    const dateLabel = r.parsedDate ? r.parsedDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '<span style="color:var(--text3)">today</span>';
+    html += `<tr><td style="font-size:12px;color:var(--text2)">${dateLabel}</td><td>${r.type}</td><td>${r.brand}</td><td>${r.style||'—'}</td><td>${r.color}</td><td>${r.size}</td><td>${r.qty}</td><td>${r.cost!=null?'$'+r.cost.toFixed(2):'—'}</td><td>${status}</td></tr>`;
   });
   html += `</tbody></table></div>`;
 
@@ -1877,7 +1885,7 @@ function confirmCSVImport() {
   let added = 0, updated = 0;
 
   valid.forEach(r => {
-    const { type, brand, style, color, size, qty, cost } = r;
+    const { type, brand, style, color, size, qty, cost, parsedDate } = r;
     // Add to catalog lists
     if(!customTypes.includes(type))   customTypes.push(type);
     if(!customBrands.includes(brand)) customBrands.push(brand);
@@ -1895,11 +1903,12 @@ function confirmCSVImport() {
       inventory.push({type, brand, style:style||'', color, size, qty, cost});
       added++;
     }
-    // Log the stock addition
+    // Log the stock addition — use provided date or fall back to today
+    const entryDate = r.parsedDate || new Date();
     stockLog.unshift({
       id: Date.now() + Math.random(),
-      isoDate: new Date().toISOString(),
-      date: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+      isoDate: entryDate.toISOString(),
+      date: entryDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
       type, brand, style:style||'', color, size, qty,
       cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null,
       source: 'csv'
