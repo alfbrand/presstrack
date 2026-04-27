@@ -168,6 +168,13 @@
     .cat-brand-header { font-size: 12px; font-weight: 600; color: var(--text2); margin: 10px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
     .cat-empty { font-size: 13px; color: var(--text3); text-align: center; padding: 1rem; }
 
+    /* EDIT LOG MODAL */
+    #edit-log-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; align-items:flex-start; justify-content:center; padding:1rem; overflow-y:auto; }
+    #edit-log-overlay.open { display:flex; }
+    #edit-log-panel { background:var(--bg); border-radius:var(--radius-lg); padding:1.5rem; width:100%; max-width:480px; border:0.5px solid var(--border); margin:auto; }
+    #edit-log-panel h2 { font-size:16px; font-weight:600; margin-bottom:0.25rem; }
+    .edit-log-meta { font-size:12px; color:var(--text2); margin-bottom:1rem; }
+
     /* WATCH / REORDER */
     .btn-watch { background: none; border: none; font-size: 16px; cursor: pointer; padding: 2px 4px; line-height: 1; opacity: 0.35; transition: opacity .15s, transform .15s; }
     .btn-watch:hover { opacity: 0.7; transform: scale(1.15); }
@@ -451,7 +458,7 @@
       <div id="log-stats" style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap"></div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th><th>Note</th></tr></thead>
+          <thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th><th>Note</th><th></th></tr></thead>
           <tbody id="log-body"></tbody>
         </table>
       </div>
@@ -482,6 +489,59 @@
     </div>
   </div><!-- /main -->
 </div><!-- /app-shell -->
+
+<!-- EDIT LOG ENTRY MODAL -->
+<div id="edit-log-overlay" onclick="closeEditLogIfOutside(event)">
+  <div id="edit-log-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.25rem">
+      <h2>Edit order entry</h2>
+      <button class="btn-icon" onclick="closeEditLog()">✕</button>
+    </div>
+    <p class="edit-log-meta" id="edit-log-meta"></p>
+
+    <p class="sub-label">Editable fields</p>
+    <div class="g2" style="margin-bottom:12px">
+      <div class="field">
+        <span class="label">Date</span>
+        <input type="date" id="edit-log-date" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+      </div>
+      <div class="field">
+        <span class="label">Shop</span>
+        <select id="edit-log-shop"></select>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px">
+      <div class="field">
+        <span class="label">Order #</span>
+        <input type="text" id="edit-log-ordernum" placeholder="e.g. 1042">
+      </div>
+      <div class="field">
+        <span class="label">Blank cost (total $)</span>
+        <div class="input-prefix">
+          <span>$</span>
+          <input type="number" id="edit-log-cost" min="0" step="0.01" placeholder="—">
+        </div>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:16px">
+      <span class="label">Note</span>
+      <input type="text" id="edit-log-note" placeholder="e.g. Rush, front only, 2-color">
+    </div>
+
+    <hr class="divider" style="margin-top:0">
+    <p class="sub-label">Read-only — logged at press time</p>
+    <div class="g2" style="margin-bottom:16px">
+      <div class="field"><span class="label">Garment</span><input type="text" id="edit-log-item" disabled></div>
+      <div class="field"><span class="label">Qty pressed</span><input type="number" id="edit-log-qty" disabled></div>
+    </div>
+
+    <div id="edit-log-alert"></div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      <button class="btn btn-primary" onclick="saveEditLog()">Save changes</button>
+      <button class="btn" onclick="closeEditLog()">Cancel</button>
+    </div>
+  </div>
+</div>
 
 <!-- SETTINGS MODAL -->
 <div id="settings-overlay" onclick="closeSettingsIfOutside(event)">
@@ -1528,9 +1588,84 @@ function renderLog() {
     <td><span class="style-tag">${o.style||'—'}</span></td>
     <td>${o.color}</td><td style="font-weight:600">${o.size}</td><td style="font-weight:600">${o.qty}</td>
     <td style="color:var(--text2)">${o.blankCost!=null?fmt(o.blankCost):'—'}</td>
-    <td style="white-space:normal;font-size:12px;color:var(--text2)">${o.note||''}</td>
+    <td style="white-space:normal;font-size:12px;color:var(--text2);max-width:140px">${o.note||''}</td>
+    <td><button class="btn btn-sm" onclick="openEditLog(${o.id})">Edit</button></td>
   </tr>`).join('');
 }
+function openEditLog(id) {
+  const entry = orderLog.find(o => o.id === id);
+  if(!entry) return;
+
+  // Populate shop dropdown
+  const shopSel = document.getElementById('edit-log-shop');
+  const shops = [...new Set([...customShops, ...orderLog.map(o=>o.shop).filter(Boolean)])].sort();
+  shopSel.innerHTML = '<option value="">No shop</option>' +
+    shops.map(s=>`<option value="${s}"${s===entry.shop?' selected':''}>${s}</option>`).join('');
+
+  // Populate editable fields
+  // Convert stored date to YYYY-MM-DD for date input
+  let dateVal = '';
+  if(entry.isoDate) {
+    dateVal = entry.isoDate.slice(0,10);
+  } else if(entry.date) {
+    // Try to parse locale date string
+    const d = new Date(entry.date);
+    if(!isNaN(d)) dateVal = d.toISOString().slice(0,10);
+  }
+  document.getElementById('edit-log-date').value    = dateVal;
+  document.getElementById('edit-log-ordernum').value = entry.orderNum || '';
+  document.getElementById('edit-log-cost').value     = entry.blankCost != null ? entry.blankCost : '';
+  document.getElementById('edit-log-note').value     = entry.note || '';
+
+  // Read-only garment summary
+  document.getElementById('edit-log-item').value = `${entry.brand}${entry.style?' '+entry.style:''} ${entry.color} ${entry.size} (${entry.type})`;
+  document.getElementById('edit-log-qty').value  = entry.qty;
+
+  // Meta line
+  document.getElementById('edit-log-meta').textContent = `Logged on ${entry.date}${entry.shop?' · '+entry.shop:''}${entry.orderNum?' · #'+entry.orderNum:''}`;
+
+  document.getElementById('edit-log-alert').innerHTML = '';
+  document.getElementById('edit-log-overlay').dataset.editId = id;
+  document.getElementById('edit-log-overlay').classList.add('open');
+}
+
+function closeEditLog() {
+  document.getElementById('edit-log-overlay').classList.remove('open');
+}
+
+function closeEditLogIfOutside(e) {
+  if(e.target.id === 'edit-log-overlay') closeEditLog();
+}
+
+function saveEditLog() {
+  const id    = parseInt(document.getElementById('edit-log-overlay').dataset.editId);
+  const entry = orderLog.find(o => o.id === id);
+  if(!entry) return;
+
+  const dateInput = document.getElementById('edit-log-date').value;
+  const shop      = document.getElementById('edit-log-shop').value;
+  const orderNum  = document.getElementById('edit-log-ordernum').value.trim();
+  const costRaw   = document.getElementById('edit-log-cost').value;
+  const note      = document.getElementById('edit-log-note').value.trim();
+  const alertEl   = document.getElementById('edit-log-alert');
+
+  // Update date fields
+  if(dateInput) {
+    const d = new Date(dateInput + 'T12:00:00'); // noon to avoid timezone shift
+    entry.isoDate  = d.toISOString();
+    entry.date     = d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+  }
+
+  entry.shop      = shop;
+  entry.orderNum  = orderNum;
+  entry.blankCost = costRaw !== '' ? Math.round(parseFloat(costRaw)*100)/100 : null;
+  entry.note      = note;
+
+  saveLog();
+  alertEl.innerHTML = '<div class="alert alert-success">Changes saved.</div>';
+  setTimeout(() => { closeEditLog(); renderLog(); updateLogFilters(); }, 800);
+}
+
 function clearLog() {
   if(!orderLog.length) return;
   if(!confirm('Clear all logged orders? This cannot be undone.')) return;
