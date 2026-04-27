@@ -276,11 +276,13 @@
           <div style="display:flex;gap:0;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
             <button id="mode-single-btn" class="btn" style="border:none;border-radius:0;padding:7px 14px;font-size:13px;background:var(--text);color:var(--bg)" onclick="setAddMode('single')">Single entry</button>
             <button id="mode-bulk-btn"   class="btn" style="border:none;border-radius:0;padding:7px 14px;font-size:13px;border-left:0.5px solid var(--border2)" onclick="setAddMode('bulk')">Size run (bulk)</button>
+            <button id="mode-csv-btn"    class="btn" style="border:none;border-radius:0;padding:7px 14px;font-size:13px;border-left:0.5px solid var(--border2)" onclick="setAddMode('csv')">CSV import</button>
           </div>
         </div>
         <div id="add-alert"></div>
 
-        <!-- Shared garment selectors -->
+        <!-- Shared garment selectors (hidden in CSV mode) -->
+        <div id="add-shared-selectors">
         <p class="sub-label">Garment details</p>
         <div class="g4" style="margin-bottom:12px">
           <div class="field">
@@ -323,6 +325,8 @@
         </div>
 
         <!-- SINGLE ENTRY MODE -->
+        </div><!-- /add-shared-selectors -->
+
         <div id="add-mode-single">
           <div class="g3" style="margin-bottom:16px">
             <div class="field">
@@ -377,6 +381,30 @@
             <button class="btn btn-primary" onclick="addBulkStock()">Add size run to inventory</button>
             <button class="btn" onclick="clearAddForm()">Clear</button>
           </div>
+        </div>
+
+        <!-- CSV IMPORT MODE -->
+        <div id="add-mode-csv" style="display:none">
+          <hr class="divider" style="margin-top:0">
+          <p class="sub-label">CSV import</p>
+          <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Download the template, fill it in, then upload it here. Any new brands, styles, colors, or types will be added to your catalog automatically.</p>
+
+          <div style="background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
+            <strong style="color:var(--text);display:block;margin-bottom:6px">Required columns:</strong>
+            type, brand, style, color, size, qty, cost<br>
+            <span style="color:var(--text3);margin-top:4px;display:block">size must be one of: XS, S, M, L, XL, 2XL, 3XL, 4XL, One size &nbsp;·&nbsp; cost is per blank in dollars (leave blank if unknown) &nbsp;·&nbsp; style is optional</span>
+          </div>
+
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+            <button class="btn" onclick="downloadCSVTemplate()">⬇ Download template</button>
+            <label class="btn" style="cursor:pointer">
+              ⬆ Choose CSV file
+              <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="handleCSVFile(event)">
+            </label>
+          </div>
+
+          <div id="csv-alert"></div>
+          <div id="csv-preview"></div>
         </div>
 
       </div>
@@ -1279,16 +1307,34 @@ let addMode = 'single';
 
 function setAddMode(mode) {
   addMode = mode;
-  const isBulk = mode === 'bulk';
-  document.getElementById('add-mode-single').style.display = isBulk ? 'none' : '';
-  document.getElementById('add-mode-bulk').style.display   = isBulk ? '' : 'none';
+  const isSingle = mode === 'single';
+  const isBulk   = mode === 'bulk';
+  const isCSV    = mode === 'csv';
+
+  document.getElementById('add-mode-single').style.display = isSingle ? '' : 'none';
+  document.getElementById('add-mode-bulk').style.display   = isBulk   ? '' : 'none';
+  document.getElementById('add-mode-csv').style.display    = isCSV    ? '' : 'none';
+
+  // Hide shared garment selectors in CSV mode — CSV has its own fields
+  const sharedSelectors = document.getElementById('add-shared-selectors');
+  if(sharedSelectors) sharedSelectors.style.display = isCSV ? 'none' : '';
+
   const singleBtn = document.getElementById('mode-single-btn');
   const bulkBtn   = document.getElementById('mode-bulk-btn');
-  singleBtn.style.background = isBulk ? '' : 'var(--text)';
-  singleBtn.style.color      = isBulk ? '' : 'var(--bg)';
-  bulkBtn.style.background   = isBulk ? 'var(--text)' : '';
-  bulkBtn.style.color        = isBulk ? 'var(--bg)' : '';
+  const csvBtn    = document.getElementById('mode-csv-btn');
+  singleBtn.style.background = isSingle ? 'var(--text)' : '';
+  singleBtn.style.color      = isSingle ? 'var(--bg)'   : '';
+  bulkBtn.style.background   = isBulk   ? 'var(--text)' : '';
+  bulkBtn.style.color        = isBulk   ? 'var(--bg)'   : '';
+  csvBtn.style.background    = isCSV    ? 'var(--text)' : '';
+  csvBtn.style.color         = isCSV    ? 'var(--bg)'   : '';
+
   if(isBulk) buildBulkGrid();
+  if(isCSV) {
+    document.getElementById('csv-alert').innerHTML = '';
+    document.getElementById('csv-preview').innerHTML = '';
+    document.getElementById('csv-file-input').value = '';
+  }
 }
 
 function buildBulkGrid() {
@@ -1670,6 +1716,208 @@ function clearLog() {
   if(!orderLog.length) return;
   if(!confirm('Clear all logged orders? This cannot be undone.')) return;
   orderLog=[]; saveLog(); updateLogFilters(); renderLog();
+}
+
+// ── CSV IMPORT ─────────────────────────────────────────────────────
+const CSV_TEMPLATE_HEADERS = ['type','brand','style','color','size','qty','cost'];
+const CSV_VALID_SIZES = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+
+function downloadCSVTemplate() {
+  const rows = [
+    CSV_TEMPLATE_HEADERS,
+    ['T-shirt','Bella+Canvas','3001C','White','S','24','5.10'],
+    ['T-shirt','Bella+Canvas','3001C','White','M','36','5.10'],
+    ['T-shirt','Gildan','G5000','Black','L','24','3.25'],
+    ['Hoodie','Gildan','18500','Navy','XL','12','9.00'],
+    ['Tote bag','','','Natural','One size','24',''],
+  ];
+  const esc = v => '"' + String(v).replace(/"/g, '""') + '"';
+  const csv = rows.map(r => r.map(esc).join(',')).join('\n');
+  const blob = new Blob([csv], {type:'text/csv'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = 'presstrack-inventory-template.csv';
+  a.click();
+}
+
+
+function parseCSV(text) {
+  const lines = text.trim().split(/\r?\n/);
+  if(lines.length < 2) throw new Error('File appears empty or has no data rows.');
+  const headers = parseCSVRow(lines[0]).map(h => h.trim().toLowerCase());
+  const required = ['type','brand','color','size','qty'];
+  const missing = required.filter(r => !headers.includes(r));
+  if(missing.length) throw new Error(`Missing required columns: ${missing.join(', ')}`);
+  const rows = [];
+  for(let i = 1; i < lines.length; i++) {
+    const line = lines[i].trim();
+    if(!line) continue;
+    const vals = parseCSVRow(line);
+    const row = {};
+    headers.forEach((h, idx) => row[h] = (vals[idx]||'').trim());
+    rows.push(row);
+  }
+  return rows;
+}
+
+function parseCSVRow(line) {
+  const result = [];
+  let cur = '', inQuote = false;
+  for(let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if(ch === '"') {
+      if(inQuote && line[i+1] === '"') { cur += '"'; i++; }
+      else inQuote = !inQuote;
+    } else if(ch === ',' && !inQuote) {
+      result.push(cur); cur = '';
+    } else {
+      cur += ch;
+    }
+  }
+  result.push(cur);
+  return result;
+}
+
+function handleCSVFile(event) {
+  const file = event.target.files[0];
+  if(!file) return;
+  const alertEl   = document.getElementById('csv-alert');
+  const previewEl = document.getElementById('csv-preview');
+  alertEl.innerHTML = '';
+  previewEl.innerHTML = '<p style="color:var(--text2);font-size:13px">Reading file…</p>';
+
+  const reader = new FileReader();
+  reader.onload = function(e) {
+    try {
+      const rows = parseCSV(e.target.result);
+      const valid = [], errors = [];
+
+      rows.forEach((row, idx) => {
+        const lineNum = idx + 2; // 1-indexed + header
+        const type  = row.type  || '';
+        const brand = row.brand || '';
+        const style = row.style || '';
+        const color = row.color || '';
+        const size  = row.size  || '';
+        const qty   = parseInt(row.qty);
+        const costRaw = row.cost || '';
+        const cost  = costRaw !== '' ? parseFloat(costRaw) : null;
+
+        if(!type)  { errors.push(`Row ${lineNum}: missing type`); return; }
+        if(!brand) { errors.push(`Row ${lineNum}: missing brand`); return; }
+        if(!color) { errors.push(`Row ${lineNum}: missing color`); return; }
+        if(!size)  { errors.push(`Row ${lineNum}: missing size`); return; }
+        if(isNaN(qty)||qty<1) { errors.push(`Row ${lineNum}: invalid qty "${row.qty}"`); return; }
+        if(!CSV_VALID_SIZES.includes(size)) { errors.push(`Row ${lineNum}: invalid size "${size}" — must be one of ${CSV_VALID_SIZES.join(', ')}`); return; }
+        if(cost !== null && isNaN(cost)) { errors.push(`Row ${lineNum}: invalid cost "${costRaw}"`); return; }
+
+        valid.push({ type, brand, style, color, size, qty, cost: cost !== null ? Math.round(cost*100)/100 : null });
+      });
+
+      renderCSVPreview(valid, errors);
+    } catch(err) {
+      alertEl.innerHTML = `<div class="alert alert-error">${err.message}</div>`;
+      previewEl.innerHTML = '';
+    }
+  };
+  reader.readAsText(file);
+}
+
+function renderCSVPreview(valid, errors) {
+  const alertEl   = document.getElementById('csv-alert');
+  const previewEl = document.getElementById('csv-preview');
+
+  let html = '';
+  if(errors.length) {
+    html += `<div class="alert alert-error" style="margin-bottom:12px">
+      <strong>${errors.length} row${errors.length>1?'s':''} skipped due to errors:</strong><br>
+      <span style="font-size:12px">${errors.join('<br>')}</span>
+    </div>`;
+  }
+
+  if(!valid.length) {
+    previewEl.innerHTML = html + `<p style="color:var(--text2);font-size:13px">No valid rows to import.</p>`;
+    return;
+  }
+
+  // Check for existing SKU conflicts
+  const updates = valid.filter(r => getItem(r.type, r.brand, r.style, r.color, r.size));
+  const news    = valid.filter(r => !getItem(r.type, r.brand, r.style, r.color, r.size));
+
+  html += `<div style="display:flex;gap:10px;margin-bottom:12px;flex-wrap:wrap">
+    <div class="stat" style="padding:8px 14px;flex:0 0 auto"><div class="stat-label">Valid rows</div><div class="stat-val" style="font-size:17px">${valid.length}</div></div>
+    <div class="stat" style="padding:8px 14px;flex:0 0 auto"><div class="stat-label">New SKUs</div><div class="stat-val" style="font-size:17px">${news.length}</div></div>
+    <div class="stat" style="padding:8px 14px;flex:0 0 auto"><div class="stat-label">Updates to existing</div><div class="stat-val" style="font-size:17px">${updates.length}</div></div>
+  </div>`;
+
+  html += `<div class="tbl-wrap" style="margin-bottom:14px"><table>
+    <thead><tr><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Status</th></tr></thead><tbody>`;
+  valid.forEach(r => {
+    const exists = getItem(r.type, r.brand, r.style, r.color, r.size);
+    const status = exists
+      ? `<span class="badge badge-low">Update +${r.qty} (now ${exists.qty+r.qty})</span>`
+      : `<span class="badge badge-ok">New</span>`;
+    html += `<tr><td>${r.type}</td><td>${r.brand}</td><td>${r.style||'—'}</td><td>${r.color}</td><td>${r.size}</td><td>${r.qty}</td><td>${r.cost!=null?'$'+r.cost.toFixed(2):'—'}</td><td>${status}</td></tr>`;
+  });
+  html += `</tbody></table></div>`;
+
+  html += `<div style="display:flex;gap:8px;flex-wrap:wrap">
+    <button class="btn btn-primary" onclick="confirmCSVImport()">Import ${valid.length} row${valid.length>1?'s':''}</button>
+    <button class="btn" onclick="document.getElementById('csv-preview').innerHTML='';document.getElementById('csv-file-input').value=''">Cancel</button>
+  </div>`;
+
+  // Stash valid rows for import
+  window._csvPending = valid;
+  previewEl.innerHTML = html;
+}
+
+function confirmCSVImport() {
+  const valid = window._csvPending;
+  if(!valid||!valid.length) return;
+  let added = 0, updated = 0;
+
+  valid.forEach(r => {
+    const { type, brand, style, color, size, qty, cost } = r;
+    // Add to catalog lists
+    if(!customTypes.includes(type))   customTypes.push(type);
+    if(!customBrands.includes(brand)) customBrands.push(brand);
+    if(!customColors.includes(color)) customColors.push(color);
+    if(style && brand) {
+      if(!brandStyles[brand]) brandStyles[brand] = [];
+      if(!brandStyles[brand].includes(style)) brandStyles[brand].push(style);
+    }
+    const existing = getItem(type, brand, style, color, size);
+    if(existing) {
+      existing.qty += qty;
+      if(cost !== null) existing.cost = cost;
+      updated++;
+    } else {
+      inventory.push({type, brand, style:style||'', color, size, qty, cost});
+      added++;
+    }
+    // Log the stock addition
+    stockLog.unshift({
+      id: Date.now() + Math.random(),
+      isoDate: new Date().toISOString(),
+      date: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+      type, brand, style:style||'', color, size, qty,
+      cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null,
+      source: 'csv'
+    });
+  });
+
+  saveOptions(); save(); saveStockLog(); updateFilters();
+  window._csvPending = null;
+
+  document.getElementById('csv-preview').innerHTML = '';
+  document.getElementById('csv-file-input').value = '';
+  document.getElementById('csv-alert').innerHTML =
+    `<div class="alert alert-success">Imported ${added} new SKU${added!==1?'s':''} and updated ${updated} existing — inventory ready.</div>`;
+  setTimeout(() => {
+    document.getElementById('csv-alert').innerHTML = '';
+    setAddMode('single');
+    showTab('inventory');
+  }, 2500);
 }
 
 // ── INIT ───────────────────────────────────────────────────────────
