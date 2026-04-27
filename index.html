@@ -144,7 +144,6 @@
     .qty-btn { width: 24px; height: 24px; border: 0.5px solid var(--border2); border-radius: 4px; background: var(--bg); color: var(--text); font-size: 16px; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; font-family: var(--font); }
     .qty-btn:hover { background: var(--bg2); }
     .qty-val { min-width: 28px; text-align: center; font-size: 13px; }
-    .receipt-mono { font-family: 'SF Mono', 'Fira Code', monospace; font-size: 13px; background: var(--bg2); }
     .cost-preview { background: var(--bg2); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; font-size: 13px; }
 
     /* SETTINGS MODAL */
@@ -172,9 +171,12 @@
     /* BULK SIZE GRID */
     .size-cell { background: var(--bg2); border-radius: var(--radius); padding: 10px; display: flex; flex-direction: column; gap: 6px; }
     .size-cell-label { font-size: 12px; font-weight: 600; color: var(--text2); text-align: center; }
-    .size-cell input { text-align: center; padding: 6px; font-size: 15px; font-weight: 500; }
+    .size-cell-sublabel { font-size: 11px; color: var(--text3); text-align: center; margin-top: 2px; }
+    .size-cell .qty-inp { text-align: center; padding: 6px; font-size: 15px; font-weight: 600; }
+    .size-cell .cost-inp { text-align: center; padding: 5px 6px; font-size: 12px; color: var(--text2); }
     .size-cell.has-qty { background: var(--info-bg); }
     .size-cell.has-qty .size-cell-label { color: var(--info-text); }
+    .size-cell.has-qty .size-cell-sublabel { color: var(--info-text); opacity: 0.7; }
 
     /* VERSION BADGE */
     .version { font-size: 11px; color: var(--text3); }
@@ -191,15 +193,9 @@
   </div>
 
   <div id="main">
-    <!-- API KEY NOTICE -->
-    <div id="api-notice" class="alert alert-info" style="display:none;margin-bottom:1rem">
-      Receipt parsing needs an Anthropic API key. <a href="#" onclick="openSettings();return false;" style="color:inherit;font-weight:600">Add it in Settings →</a>
-    </div>
-
     <div class="tabs">
       <button class="tab active" onclick="showTab('inventory')">Inventory</button>
       <button class="tab" onclick="showTab('add')">Add stock</button>
-      <button class="tab" onclick="showTab('receipt')">Import receipt</button>
       <button class="tab" onclick="showTab('press')">Press order</button>
       <button class="tab" onclick="showTab('log')">Order log</button>
     </div>
@@ -315,46 +311,29 @@
         <div id="add-mode-bulk" style="display:none">
           <hr class="divider" style="margin-top:0">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-            <p class="sub-label" style="margin:0">Size run — enter qty per size</p>
+            <p class="sub-label" style="margin:0">Size run — qty &amp; cost per size</p>
             <div style="display:flex;gap:6px;align-items:center">
               <span style="font-size:12px;color:var(--text2)">Fill all sizes with:</span>
               <input type="number" id="bulk-fill-val" min="1" placeholder="12" style="width:60px;padding:5px 7px;font-size:13px">
               <button class="btn btn-sm" onclick="bulkFillAll()">Fill</button>
             </div>
           </div>
-          <div id="bulk-size-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-bottom:14px"></div>
-          <div class="field" style="max-width:200px;margin-bottom:16px">
-            <span class="label">Cost per blank ($) — applies to all sizes</span>
-            <div class="input-prefix">
+          <div id="bulk-size-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-bottom:10px"></div>
+          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+            <span style="font-size:12px;color:var(--text2)">Fill all costs with:</span>
+            <div class="input-prefix" style="width:auto">
               <span>$</span>
-              <input type="number" id="bulk-cost" min="0" step="0.01" placeholder="3.50">
+              <input type="number" id="bulk-fill-cost" min="0" step="0.01" placeholder="3.50" style="width:70px">
             </div>
+            <button class="btn btn-sm" onclick="bulkFillAllCosts()">Fill costs</button>
           </div>
-          <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Leave a size blank to skip it. Adds to existing qty if the SKU already exists.</p>
+          <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Leave qty blank to skip a size. Cost per size is optional. Adds to existing qty if the SKU already exists.</p>
           <div style="display:flex;gap:8px;flex-wrap:wrap">
             <button class="btn btn-primary" onclick="addBulkStock()">Add size run to inventory</button>
             <button class="btn" onclick="clearAddForm()">Clear</button>
           </div>
         </div>
 
-      </div>
-    </div>
-
-    <!-- ── RECEIPT ── -->
-    <div id="tab-receipt" style="display:none">
-      <div class="card">
-        <div class="section-title">Import from supplier receipt</div>
-        <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Paste your receipt text below. Include type, brand, style, color, size, qty, and price if available — Claude will parse it automatically.</p>
-        <div id="receipt-alert"></div>
-        <div class="field" style="margin-bottom:12px">
-          <span class="label">Receipt text</span>
-          <textarea class="receipt-mono" id="receipt-text" placeholder="Example:&#10;T-shirt Bella+Canvas 3001C White S x24 @ $5.10&#10;T-shirt Bella+Canvas B6400 Black M x18 @ $5.50&#10;Hoodie Gildan 18500 Navy L x12 @ $9.00&#10;Tote bag natural One size x24 @ $2.50"></textarea>
-        </div>
-        <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
-          <button class="btn btn-primary" onclick="parseReceipt()">Parse &amp; import</button>
-          <span id="parse-indicator" style="display:none;font-size:13px;color:var(--text2)">Parsing with AI…</span>
-        </div>
-        <div id="receipt-preview" style="margin-top:1.25rem"></div>
       </div>
     </div>
 
@@ -457,7 +436,7 @@
         <input type="password" id="api-key-input" placeholder="sk-ant-...">
         <button class="btn" onclick="toggleApiKeyVisible()">Show</button>
       </div>
-      <span class="hint">Used only for AI receipt parsing. Stored locally — never touches GitHub.</span>
+      <span class="hint">Stored locally in your browser — never touches GitHub.</span>
     </div>
     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:1rem">
       <button class="btn btn-primary btn-sm" onclick="saveApiKey()">Save key</button>
@@ -608,7 +587,6 @@ function saveApiKey() {
   const val = document.getElementById('api-key-input').value.trim();
   if(!val) { alert('Please enter an API key.'); return; }
   localStorage.setItem('pt_api_key', val);
-  document.getElementById('api-notice').style.display = 'none';
   closeSettings();
   alert('API key saved!');
 }
@@ -616,13 +594,7 @@ function clearApiKey() {
   if(!confirm('Remove your API key?')) return;
   localStorage.removeItem('pt_api_key');
   document.getElementById('api-key-input').value = '';
-  checkApiNotice();
 }
-function checkApiNotice() {
-  const notice = document.getElementById('api-notice');
-  notice.style.display = localStorage.getItem('pt_api_key') ? 'none' : 'block';
-}
-
 // ── CATALOG MANAGER ────────────────────────────────────────────────
 function openSettings() {
   const key = localStorage.getItem('pt_api_key') || '';
@@ -1027,7 +999,7 @@ function showTab(t) {
   document.querySelectorAll('[id^="tab-"]').forEach(el=>el.style.display='none');
   document.querySelectorAll('.tab').forEach((el,i)=>{
     el.classList.remove('active');
-    if(['inventory','add','receipt','press','log'][i]===t) el.classList.add('active');
+    if(['inventory','add','press','log'][i]===t) el.classList.add('active');
   });
   document.getElementById('tab-'+t).style.display = 'block';
   if(t==='inventory') { updateStats(); updateFilters(); renderTable(); }
@@ -1140,18 +1112,49 @@ function buildBulkGrid() {
     label.className = 'size-cell-label';
     label.textContent = size;
 
-    const input = document.createElement('input');
-    input.type = 'number';
-    input.min = '0';
-    input.placeholder = '0';
-    input.id = `bulk-qty-${size}`;
-    input.oninput = () => {
-      const hasVal = parseInt(input.value) > 0;
-      cell.classList.toggle('has-qty', hasVal);
+    const qtyLabel = document.createElement('div');
+    qtyLabel.className = 'size-cell-sublabel';
+    qtyLabel.textContent = 'qty';
+
+    const qtyInput = document.createElement('input');
+    qtyInput.type = 'number';
+    qtyInput.min = '0';
+    qtyInput.placeholder = '0';
+    qtyInput.id = `bulk-qty-${size}`;
+    qtyInput.className = 'qty-inp';
+    qtyInput.oninput = () => {
+      cell.classList.toggle('has-qty', parseInt(qtyInput.value) > 0);
     };
 
+    const costLabel = document.createElement('div');
+    costLabel.className = 'size-cell-sublabel';
+    costLabel.textContent = 'cost/blank';
+
+    const costWrap = document.createElement('div');
+    costWrap.className = 'input-prefix';
+    costWrap.style.cssText = 'border-radius:4px;font-size:12px';
+
+    const costPre = document.createElement('span');
+    costPre.textContent = '$';
+    costPre.style.cssText = 'padding:5px 6px;font-size:12px';
+
+    const costInput = document.createElement('input');
+    costInput.type = 'number';
+    costInput.min = '0';
+    costInput.step = '0.01';
+    costInput.placeholder = '—';
+    costInput.id = `bulk-cost-${size}`;
+    costInput.className = 'cost-inp';
+    costInput.style.cssText = 'border:none;border-radius:0;padding:5px 6px;font-size:12px;min-width:0;width:100%';
+
+    costWrap.appendChild(costPre);
+    costWrap.appendChild(costInput);
+
     cell.appendChild(label);
-    cell.appendChild(input);
+    cell.appendChild(qtyLabel);
+    cell.appendChild(qtyInput);
+    cell.appendChild(costLabel);
+    cell.appendChild(costWrap);
     grid.appendChild(cell);
   });
 }
@@ -1168,21 +1171,30 @@ function bulkFillAll() {
   });
 }
 
+function bulkFillAllCosts() {
+  const val = document.getElementById('bulk-fill-cost').value;
+  if(!val || parseFloat(val) < 0) return;
+  SIZES.forEach(size => {
+    const input = document.getElementById(`bulk-cost-${size}`);
+    if(input) input.value = val;
+  });
+}
+
 function addBulkStock() {
   const type  = document.getElementById('add-type').value;
   const brand = document.getElementById('add-brand').value;
   const style = document.getElementById('add-style').value;
   const color = document.getElementById('add-color').value;
-  const costRaw = document.getElementById('bulk-cost').value;
-  const cost = costRaw !== '' ? Math.round(parseFloat(costRaw)*100)/100 : null;
   const el = document.getElementById('add-alert');
 
   if(!type||!brand||!color) { el.innerHTML='<div class="alert alert-error">Please select type, brand, and color first.</div>'; return; }
 
-  const entries = SIZES.map(size => ({
-    size,
-    qty: parseInt(document.getElementById(`bulk-qty-${size}`)?.value)||0
-  })).filter(e => e.qty > 0);
+  const entries = SIZES.map(size => {
+    const qty = parseInt(document.getElementById(`bulk-qty-${size}`)?.value)||0;
+    const costRaw = document.getElementById(`bulk-cost-${size}`)?.value;
+    const cost = costRaw !== '' && costRaw != null ? Math.round(parseFloat(costRaw)*100)/100 : null;
+    return { size, qty, cost };
+  }).filter(e => e.qty > 0);
 
   if(!entries.length) { el.innerHTML='<div class="alert alert-error">Enter a quantity for at least one size.</div>'; return; }
 
@@ -1193,8 +1205,8 @@ function addBulkStock() {
   }
 
   let added = 0;
-  entries.forEach(({size, qty}) => {
-    const existing = getItem(type, brand, style||''', color, size);
+  entries.forEach(({size, qty, cost}) => {
+    const existing = getItem(type, brand, style||'', color, size);
     if(existing) { existing.qty += qty; if(cost !== null) existing.cost = cost; }
     else { inventory.push({type, brand, style:style||'', color, size, qty, cost}); }
     added++;
@@ -1202,16 +1214,19 @@ function addBulkStock() {
 
   save(); updateFilters();
   const totalQty = entries.reduce((s,e)=>s+e.qty, 0);
-  const sizeList = entries.map(e=>`${e.size}×${e.qty}`).join(', ');
-  el.innerHTML=`<div class="alert alert-success">Added ${totalQty} units across ${added} size${added>1?'s':''} for ${brand}${style?' '+style:'' } ${color} (${type}): ${sizeList}${cost!=null?' at $'+cost.toFixed(2)+'/unit':''}.</div>`;
-  setTimeout(()=>el.innerHTML='', 5000);
+  const sizeList = entries.map(e=>`${e.size}×${e.qty}${e.cost!=null?' ($'+e.cost.toFixed(2)+')':''}`).join(', ');
+  el.innerHTML=`<div class="alert alert-success">Added ${totalQty} units across ${added} size${added>1?'s':''} for ${brand}${style?' '+style:''} ${color} (${type}): ${sizeList}.</div>`;
+  setTimeout(()=>el.innerHTML='', 6000);
 
-  // Clear qty fields but keep garment selection for quick color/style variants
+  // Clear qty and cost fields, keep garment selection for quick color/style variants
   SIZES.forEach(size => {
-    const input = document.getElementById(`bulk-qty-${size}`);
-    if(input) { input.value=''; document.getElementById(`bulk-cell-${size}`).classList.remove('has-qty'); }
+    const qtyInp = document.getElementById(`bulk-qty-${size}`);
+    const costInp = document.getElementById(`bulk-cost-${size}`);
+    if(qtyInp)  { qtyInp.value=''; document.getElementById(`bulk-cell-${size}`).classList.remove('has-qty'); }
+    if(costInp) costInp.value='';
   });
   document.getElementById('bulk-fill-val').value='';
+  document.getElementById('bulk-fill-cost').value='';
 }
 
 function addStock() {
@@ -1243,68 +1258,19 @@ function clearAddForm() {
   document.getElementById('add-brand').value='';
   document.getElementById('add-qty').value='12';
   document.getElementById('add-cost').value='';
-  document.getElementById('bulk-cost').value='';
   const styleEl=document.getElementById('add-style');
   styleEl.innerHTML='<option value="">Select style</option>'; styleEl.disabled=true;
   document.getElementById('style-hint').textContent='Select a brand first';
   ['type','brand','style','color'].forEach(f=>cancelNew(f));
   SIZES.forEach(size => {
-    const input = document.getElementById(`bulk-qty-${size}`);
-    if(input) { input.value=''; document.getElementById(`bulk-cell-${size}`)?.classList.remove('has-qty'); }
+    const qtyInp = document.getElementById(`bulk-qty-${size}`);
+    const costInp = document.getElementById(`bulk-cost-${size}`);
+    if(qtyInp)  { qtyInp.value=''; document.getElementById(`bulk-cell-${size}`)?.classList.remove('has-qty'); }
+    if(costInp) costInp.value='';
   });
   document.getElementById('bulk-fill-val').value='';
-}
-
-// ── RECEIPT PARSING ────────────────────────────────────────────────
-async function parseReceipt() {
-  const text=document.getElementById('receipt-text').value.trim();
-  if(!text) { document.getElementById('receipt-alert').innerHTML='<div class="alert alert-error">Please paste some receipt text first.</div>'; return; }
-  const apiKey=localStorage.getItem('pt_api_key');
-  if(!apiKey) { document.getElementById('receipt-alert').innerHTML='<div class="alert alert-error">No API key set. Add one in ⚙ Settings to use receipt parsing.</div>'; return; }
-  document.getElementById('parse-indicator').style.display='inline';
-  document.getElementById('receipt-preview').innerHTML='';
-  document.getElementById('receipt-alert').innerHTML='';
-  try {
-    const res=await fetch('https://api.anthropic.com/v1/messages',{
-      method:'POST',
-      headers:{'Content-Type':'application/json','x-api-key':apiKey,'anthropic-version':'2023-06-01','anthropic-dangerous-direct-browser-access':'true'},
-      body:JSON.stringify({
-        model:'claude-sonnet-4-20250514', max_tokens:1400,
-        messages:[{role:'user',content:`Parse this supplier receipt and extract each line item. Return ONLY a JSON array, no markdown. Each object: {"type":"...","brand":"...","style":"...","color":"...","size":"...","qty":number,"cost":number_or_null}. type=garment type, style=model/SKU scoped to that brand (e.g. 3001C for Bella+Canvas, G5000 for Gildan), cost=per-unit price or null. Sizes: XS,S,M,L,XL,2XL,3XL,4XL,"One size". Receipt:\n\n${text}`}]
-      })
-    });
-    if(!res.ok) { const err=await res.json(); throw new Error(err.error?.message||'API error'); }
-    const data=await res.json();
-    const raw=data.content.map(b=>b.text||'').join('').replace(/```json|```/g,'').trim();
-    const items=JSON.parse(raw);
-    if(!Array.isArray(items)||!items.length) throw new Error('No items found');
-    let html=`<p style="font-size:14px;font-weight:600;margin-bottom:10px">Parsed ${items.length} item${items.length>1?'s':''}:</p><div class="tbl-wrap" style="margin-bottom:12px"><table><thead><tr><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th></tr></thead><tbody>`;
-    items.forEach(i=>html+=`<tr><td>${i.type}</td><td>${i.brand}</td><td>${i.style||'—'}</td><td>${i.color}</td><td>${i.size}</td><td>${i.qty}</td><td>${i.cost!=null?fmt(i.cost):'—'}</td></tr>`);
-    html+=`</tbody></table></div><div style="display:flex;gap:8px"><button class="btn btn-primary" onclick="importParsed(${encodeURIComponent(JSON.stringify(items))})">Import all</button><button class="btn" onclick="document.getElementById('receipt-preview').innerHTML=''">Cancel</button></div>`;
-    document.getElementById('receipt-preview').innerHTML=html;
-  } catch(e) {
-    document.getElementById('receipt-alert').innerHTML=`<div class="alert alert-error">Error: ${e.message}</div>`;
-  }
-  document.getElementById('parse-indicator').style.display='none';
-}
-function importParsed(encoded) {
-  const items=JSON.parse(decodeURIComponent(encoded)); let added=0;
-  items.forEach(i=>{
-    if(!i.type||!i.brand||!i.color||!i.size||!i.qty) return;
-    if(!customTypes.includes(i.type))  customTypes.push(i.type);
-    if(!customBrands.includes(i.brand)) customBrands.push(i.brand);
-    if(!customColors.includes(i.color)) customColors.push(i.color);
-    if(i.style&&i.brand) { if(!brandStyles[i.brand]) brandStyles[i.brand]=[]; if(!brandStyles[i.brand].includes(i.style)) brandStyles[i.brand].push(i.style); }
-    const existing=getItem(i.type,i.brand,i.style||'',i.color,i.size);
-    if(existing) { existing.qty+=i.qty; if(i.cost!=null) existing.cost=i.cost; }
-    else { inventory.push({type:i.type,brand:i.brand,style:i.style||'',color:i.color,size:i.size,qty:i.qty,cost:i.cost??null}); }
-    added++;
-  });
-  saveOptions(); save(); updateFilters();
-  document.getElementById('receipt-preview').innerHTML='';
-  document.getElementById('receipt-alert').innerHTML=`<div class="alert alert-success">Imported ${added} items into inventory.</div>`;
-  document.getElementById('receipt-text').value='';
-  setTimeout(()=>document.getElementById('receipt-alert').innerHTML='', 3000);
+  const bfc = document.getElementById('bulk-fill-cost');
+  if(bfc) bfc.value='';
 }
 
 // ── PRESS ORDER ────────────────────────────────────────────────────
@@ -1422,7 +1388,6 @@ function clearLog() {
 }
 
 // ── INIT ───────────────────────────────────────────────────────────
-checkApiNotice();
 updateStats(); updateFilters(); renderTable();
 </script>
 </body>
