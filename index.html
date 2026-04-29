@@ -210,6 +210,12 @@
       body { background: white; color: black; }
       .card { border: 1px solid #ccc; box-shadow: none; }
       .rpt-section { page-break-inside: avoid; }
+    .rpt-collapse-btn { background:none; border:none; cursor:pointer; font-size:13px; color:var(--text2); padding:0; line-height:1; transition:transform .2s; display:inline-block; margin-left:6px; }
+    .rpt-collapse-btn.open { transform:rotate(90deg); }
+    .rpt-collapse-header { display:flex; align-items:center; padding:12px 14px; border-bottom:0.5px solid var(--border); cursor:pointer; user-select:none; }
+    .rpt-collapse-header:hover { background:var(--bg2); }
+    .rpt-collapse-header-text { font-weight:600; font-size:13px; flex:1; }
+    .rpt-collapse-body { overflow:hidden; transition:none; }
     }
     /* REPORT STYLES */
     .rpt-section { margin-bottom: 2rem; }
@@ -2077,6 +2083,15 @@ function confirmCSVImport() {
 updateStats(); updateFilters(); renderTable();
 
 // ── REPORTS ────────────────────────────────────────────────────────
+function toggleRptSection(id) {
+  const body = document.getElementById(id);
+  const btn  = document.getElementById(id + '-btn');
+  if(!body || !btn) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  btn.classList.toggle('open', !isOpen);
+}
+
 function initReports() {
   const inp = document.getElementById('report-month');
   if(!inp.value) {
@@ -2155,34 +2170,42 @@ function renderReports() {
   </div>`;
 
   // ── Purchased detail table ──────────────────────────────────────
-  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:auto">
-    <div style="padding:12px 14px;border-bottom:0.5px solid var(--border);font-weight:600;font-size:13px">Inventory purchased this month (${added.length} entries)${shopFilter?' <span style=\"font-size:11px;color:var(--text2);font-weight:400\"> — stock additions are not shop-specific</span>':''}</div>`;
+  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
+    <div class="rpt-collapse-header" onclick="toggleRptSection('rpt-purchased')">
+      <span class="rpt-collapse-header-text">Inventory purchased this month (${added.length} entries)${shopFilter?' <span style=\"font-size:11px;color:var(--text2);font-weight:400\"> — stock additions are not shop-specific</span>':''}</span>
+      <span class="rpt-collapse-btn open" id="rpt-purchased-btn">▶</span>
+    </div>
+    <div class="rpt-collapse-body" id="rpt-purchased">`;
   if(added.length) {
-    html += `<table><thead><tr><th>Date</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Total cost</th></tr></thead><tbody>`;
+    html += `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Total cost</th></tr></thead><tbody>`;
     added.forEach(e => {
       html += `<tr><td>${e.date}</td><td>${e.type}</td><td>${e.brand}</td><td>${e.style||'—'}</td><td>${e.color}</td><td>${e.size}</td><td>${e.qty}</td><td>${e.cost!=null?'$'+e.cost.toFixed(2):'—'}</td><td>${e.totalCost!=null?'$'+e.totalCost.toFixed(2):'—'}</td></tr>`;
     });
     html += `<tr style="font-weight:600;background:var(--bg2)"><td colspan="6">Total</td><td>${addedQty}</td><td></td><td>${addedCost>0?'$'+addedCost.toFixed(2):'—'}</td></tr>`;
-    html += `</tbody></table>`;
+    html += `</tbody></table></div>`;
   } else {
     html += `<p class="rpt-empty" style="padding:1rem 14px">No stock additions logged this month.</p>`;
   }
-  html += `</div>`;
+  html += `</div></div>`;
 
   // ── Pressed detail table ────────────────────────────────────────
-  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:auto">
-    <div style="padding:12px 14px;border-bottom:0.5px solid var(--border);font-weight:600;font-size:13px">Orders pressed this month (${pressed.length} entries)</div>`;
+  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
+    <div class="rpt-collapse-header" onclick="toggleRptSection('rpt-pressed')">
+      <span class="rpt-collapse-header-text">Orders pressed this month (${pressed.length} entries)</span>
+      <span class="rpt-collapse-btn open" id="rpt-pressed-btn">▶</span>
+    </div>
+    <div class="rpt-collapse-body" id="rpt-pressed">`;
   if(pressed.length) {
-    html += `<table><thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th></tr></thead><tbody>`;
+    html += `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th></tr></thead><tbody>`;
     pressed.forEach(o => {
       html += `<tr><td>${o.date}</td><td>${o.shop||'—'}</td><td>${o.orderNum||'—'}</td><td>${o.type}</td><td>${o.brand}</td><td>${o.style||'—'}</td><td>${o.color}</td><td>${o.size}</td><td>${o.qty}</td><td>${o.blankCost!=null?'$'+o.blankCost.toFixed(2):'—'}</td></tr>`;
     });
     html += `<tr style="font-weight:600;background:var(--bg2)"><td colspan="8">Total</td><td>${pressedQty}</td><td>${pressedCost>0?'$'+pressedCost.toFixed(2):'—'}</td></tr>`;
-    html += `</tbody></table>`;
+    html += `</tbody></table></div>`;
   } else {
     html += `<p class="rpt-empty" style="padding:1rem 14px">No press orders logged this month.</p>`;
   }
-  html += `</div>`;
+  html += `</div></div>`;
 
   // ── Dashboard: popularity from ALL-TIME order log ───────────────
   html += `<div style="margin-bottom:0.5rem"><h3 style="font-size:15px;font-weight:700;margin-bottom:0.25rem">Popularity dashboard — all time</h3>
