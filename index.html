@@ -1336,7 +1336,9 @@ function removeItem(t,b,st,c,s) {
 
 // ── ADD STOCK ──────────────────────────────────────────────────────
 // ── ADD MODE TOGGLE ────────────────────────────────────────────────
-const SIZES = ['XS','S','M','L','XL','2XL','3XL','4XL'];
+const SIZES        = ['XS','S','M','L','XL','2XL','3XL','4XL'];
+const SIZES_INFANT = ['NB','6mo','12mo','24mo','2T','3T','4T','5T'];
+const SIZES_ALL    = [...SIZES, ...SIZES_INFANT, 'One size'];
 let addMode = 'single';
 
 function setAddMode(mode) {
@@ -1374,7 +1376,12 @@ function setAddMode(mode) {
 function buildBulkGrid() {
   const grid = document.getElementById('bulk-size-grid');
   grid.innerHTML = '';
-  SIZES.forEach(size => {
+  const addGroup = (label, sizeList) => {
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'grid-column:1/-1;font-size:11px;font-weight:600;color:var(--text2);text-transform:uppercase;letter-spacing:.05em;padding-bottom:2px;border-bottom:0.5px solid var(--border);margin-bottom:2px';
+    hdr.textContent = label;
+    grid.appendChild(hdr);
+    sizeList.forEach(size => {
     const cell = document.createElement('div');
     cell.className = 'size-cell';
     cell.id = `bulk-cell-${size}`;
@@ -1421,19 +1428,22 @@ function buildBulkGrid() {
     costWrap.appendChild(costPre);
     costWrap.appendChild(costInput);
 
-    cell.appendChild(label);
-    cell.appendChild(qtyLabel);
-    cell.appendChild(qtyInput);
-    cell.appendChild(costLabel);
-    cell.appendChild(costWrap);
-    grid.appendChild(cell);
-  });
+      cell.appendChild(label);
+      cell.appendChild(qtyLabel);
+      cell.appendChild(qtyInput);
+      cell.appendChild(costLabel);
+      cell.appendChild(costWrap);
+      grid.appendChild(cell);
+    });
+  };
+  addGroup('Adult', SIZES);
+  addGroup('Infant / Toddler', SIZES_INFANT);
 }
 
 function bulkFillAll() {
   const val = document.getElementById('bulk-fill-val').value;
   if(!val || parseInt(val) < 1) return;
-  SIZES.forEach(size => {
+  [...SIZES, ...SIZES_INFANT].forEach(size => {
     const input = document.getElementById(`bulk-qty-${size}`);
     if(input) {
       input.value = val;
@@ -1445,7 +1455,7 @@ function bulkFillAll() {
 function bulkFillAllCosts() {
   const val = document.getElementById('bulk-fill-cost').value;
   if(!val || parseFloat(val) < 0) return;
-  SIZES.forEach(size => {
+  [...SIZES, ...SIZES_INFANT].forEach(size => {
     const input = document.getElementById(`bulk-cost-${size}`);
     if(input) input.value = val;
   });
@@ -1460,7 +1470,7 @@ function addBulkStock() {
 
   if(!type||!brand||!color) { el.innerHTML='<div class="alert alert-error">Please select type, brand, and color first.</div>'; return; }
 
-  const entries = SIZES.map(size => {
+  const entries = [...SIZES, ...SIZES_INFANT].map(size => {
     const qty = parseInt(document.getElementById(`bulk-qty-${size}`)?.value)||0;
     const costRaw = document.getElementById(`bulk-cost-${size}`)?.value;
     const cost = costRaw !== '' && costRaw != null ? Math.round(parseFloat(costRaw)*100)/100 : null;
@@ -1552,7 +1562,7 @@ function clearAddForm() {
   styleEl.innerHTML='<option value="">Select style</option>'; styleEl.disabled=true;
   document.getElementById('style-hint').textContent='Select a brand first';
   ['type','brand','style','color'].forEach(f=>cancelNew(f));
-  SIZES.forEach(size => {
+  [...SIZES, ...SIZES_INFANT].forEach(size => {
     const qtyInp = document.getElementById(`bulk-qty-${size}`);
     const costInp = document.getElementById(`bulk-cost-${size}`);
     if(qtyInp)  { qtyInp.value=''; document.getElementById(`bulk-cell-${size}`)?.classList.remove('has-qty'); }
@@ -1854,7 +1864,7 @@ function clearLog() {
 
 // ── CSV IMPORT ─────────────────────────────────────────────────────
 const CSV_TEMPLATE_HEADERS = ['type','brand','style','color','size','qty','cost','date_added'];
-const CSV_VALID_SIZES = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+const CSV_VALID_SIZES = [...SIZES, ...SIZES_INFANT, 'One size'];
 
 function downloadCSVTemplate() {
   const rows = [
