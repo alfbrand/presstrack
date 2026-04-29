@@ -210,12 +210,14 @@
       body { background: white; color: black; }
       .card { border: 1px solid #ccc; box-shadow: none; }
       .rpt-section { page-break-inside: avoid; }
-    .rpt-collapse-btn { background:none; border:none; cursor:pointer; font-size:13px; color:var(--text2); padding:0; line-height:1; transition:transform .2s; display:inline-block; margin-left:6px; }
+    .rpt-collapse-btn { background:none; border:none; cursor:pointer; font-size:11px; color:var(--text2); padding:0; line-height:1; display:inline-block; margin-left:8px; transition:transform .2s; }
     .rpt-collapse-btn.open { transform:rotate(90deg); }
-    .rpt-collapse-header { display:flex; align-items:center; padding:12px 14px; border-bottom:0.5px solid var(--border); cursor:pointer; user-select:none; }
+    .rpt-collapse-header { display:flex; align-items:center; padding:12px 14px; cursor:pointer; user-select:none; border-radius:var(--radius-lg); }
+    .rpt-collapse-header.has-open-body { border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom:0.5px solid var(--border); }
     .rpt-collapse-header:hover { background:var(--bg2); }
     .rpt-collapse-header-text { font-weight:600; font-size:13px; flex:1; }
-    .rpt-collapse-body { overflow:hidden; transition:none; }
+    .rpt-collapse-body { overflow:auto; }
+    .rpt-collapse-body[style*="display: none"] + * { border-top:none; }
     }
     /* REPORT STYLES */
     .rpt-section { margin-bottom: 2rem; }
@@ -2086,10 +2088,13 @@ updateStats(); updateFilters(); renderTable();
 function toggleRptSection(id) {
   const body = document.getElementById(id);
   const btn  = document.getElementById(id + '-btn');
+  const hdr  = document.getElementById(id + '-hdr');
   if(!body || !btn) return;
   const isOpen = body.style.display !== 'none';
   body.style.display = isOpen ? 'none' : '';
+  btn.textContent = isOpen ? '▶' : '▼';
   btn.classList.toggle('open', !isOpen);
+  if(hdr) hdr.classList.toggle('has-open-body', !isOpen);
 }
 
 function initReports() {
@@ -2171,9 +2176,9 @@ function renderReports() {
 
   // ── Purchased detail table ──────────────────────────────────────
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
-    <div class="rpt-collapse-header" onclick="toggleRptSection('rpt-purchased')">
+    <div class="rpt-collapse-header has-open-body" id="rpt-purchased-hdr" onclick="toggleRptSection('rpt-purchased')">
       <span class="rpt-collapse-header-text">Inventory purchased this month (${added.length} entries)${shopFilter?' <span style=\"font-size:11px;color:var(--text2);font-weight:400\"> — stock additions are not shop-specific</span>':''}</span>
-      <span class="rpt-collapse-btn open" id="rpt-purchased-btn">▶</span>
+      <span class="rpt-collapse-btn open" id="rpt-purchased-btn">▼</span>
     </div>
     <div class="rpt-collapse-body" id="rpt-purchased">`;
   if(added.length) {
@@ -2190,9 +2195,9 @@ function renderReports() {
 
   // ── Pressed detail table ────────────────────────────────────────
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
-    <div class="rpt-collapse-header" onclick="toggleRptSection('rpt-pressed')">
+    <div class="rpt-collapse-header has-open-body" id="rpt-pressed-hdr" onclick="toggleRptSection('rpt-pressed')">
       <span class="rpt-collapse-header-text">Orders pressed this month (${pressed.length} entries)</span>
-      <span class="rpt-collapse-btn open" id="rpt-pressed-btn">▶</span>
+      <span class="rpt-collapse-btn open" id="rpt-pressed-btn">▼</span>
     </div>
     <div class="rpt-collapse-body" id="rpt-pressed">`;
   if(pressed.length) {
