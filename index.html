@@ -168,6 +168,13 @@
     .cat-brand-header { font-size: 12px; font-weight: 600; color: var(--text2); margin: 10px 0 6px; text-transform: uppercase; letter-spacing: .04em; }
     .cat-empty { font-size: 13px; color: var(--text3); text-align: center; padding: 1rem; }
 
+    /* PRESS ORDER CART */
+    .cart-item { display:flex; align-items:center; gap:8px; background:var(--bg2); border-radius:var(--radius); padding:9px 12px; margin-bottom:6px; flex-wrap:wrap; }
+    .cart-item-name { flex:1; font-size:13px; font-weight:500; min-width:160px; }
+    .cart-item-meta { font-size:12px; color:var(--text2); }
+    .cart-item-cost { font-size:12px; color:var(--text2); min-width:70px; text-align:right; }
+    .cart-empty { text-align:center; padding:1.25rem; color:var(--text3); font-size:13px; border:0.5px dashed var(--border2); border-radius:var(--radius); }
+
     /* EDIT LOG MODAL */
     #edit-log-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; align-items:flex-start; justify-content:center; padding:1rem; overflow-y:auto; }
     #edit-log-overlay.open { display:flex; }
@@ -415,6 +422,8 @@
       <div class="card">
         <div class="section-title">Log a press order</div>
         <div id="press-alert"></div>
+
+        <!-- Order header -->
         <p class="sub-label">Order details</p>
         <div class="g3" style="margin-bottom:12px">
           <div class="field">
@@ -435,8 +444,20 @@
             <input type="text" id="press-note" placeholder="e.g. Rush, front only, 2-color">
           </div>
         </div>
+
         <hr class="divider">
-        <p class="sub-label">Blank selection</p>
+
+        <!-- Order lines cart -->
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+          <p class="sub-label" style="margin:0">Order lines</p>
+          <span id="press-line-count" style="font-size:12px;color:var(--text2)">No items added yet</span>
+        </div>
+        <div id="press-cart" style="margin-bottom:12px"></div>
+
+        <hr class="divider">
+
+        <!-- Blank selector -->
+        <p class="sub-label">Add a garment</p>
         <div class="g4" style="margin-bottom:12px">
           <div class="field">
             <span class="label">Stock type</span>
@@ -462,15 +483,28 @@
             <select id="press-size" onchange="showPressCost()"><option value="">Select size</option></select>
           </div>
           <div class="field">
-            <span class="label">Quantity pressed</span>
+            <span class="label">Quantity</span>
             <input type="number" id="press-qty" min="1" value="1" oninput="showPressCost()">
           </div>
         </div>
         <div id="press-cost-preview" class="cost-preview" style="display:none;max-width:380px">
-          <span style="color:var(--text2)">Blank cost for this order:</span>
+          <span style="color:var(--text2)">Blank cost for this line:</span>
           <span id="press-cost-val" style="font-weight:600;margin-left:8px"></span>
         </div>
-        <button class="btn btn-primary" onclick="pressOrder()">Deduct from inventory &amp; log order</button>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
+          <button class="btn btn-primary" onclick="addPressLine()">+ Add to order</button>
+        </div>
+
+        <hr class="divider">
+
+        <!-- Order summary + submit -->
+        <div id="press-summary" style="display:none;background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px">
+          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+            <span style="color:var(--text2)">Total blank cost:</span>
+            <span id="press-total-cost" style="font-weight:700;font-size:15px"></span>
+          </div>
+        </div>
+        <button class="btn btn-primary" id="press-submit-btn" style="display:none" onclick="submitPressOrder()">Submit order &amp; deduct inventory</button>
       </div>
     </div>
 
@@ -1182,7 +1216,7 @@ function showTab(t) {
   document.getElementById('tab-'+t).style.display = 'block';
   if(t==='inventory') { updateStats(); updateFilters(); renderTable(); }
   if(t==='add')       { populateAddDropdowns(); if(addMode==='bulk') buildBulkGrid(); }
-  if(t==='press')     populatePressDropdowns();
+  if(t==='press')     { pressCart=[]; populatePressDropdowns(); }
   if(t==='log')       { updateLogFilters(); renderLog(); }
   if(t==='reports')   initReports();
 }
@@ -1583,30 +1617,130 @@ function showPressCost() {
   preview.style.display='block';
   document.getElementById('press-cost-val').textContent=item.cost!=null?`${fmt(item.cost)} × ${qty} = ${fmt(item.cost*qty)}`:'No cost set for this blank';
 }
-function pressOrder() {
-  const shop=document.getElementById('press-shop').value;
-  const orderNum=document.getElementById('press-order-num').value.trim();
-  const note=document.getElementById('press-note').value.trim();
-  const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value;
-  const style=document.getElementById('press-style').value, color=document.getElementById('press-color').value;
-  const size=document.getElementById('press-size').value, qty=parseInt(document.getElementById('press-qty').value)||0;
-  const el=document.getElementById('press-alert');
-  if(!type||!brand||!color||!size||qty<1) { el.innerHTML='<div class="alert alert-error">Select a type, brand, color, size, and quantity.</div>'; return; }
-  const item=getItem(type,brand,style,color,size);
-  if(!item) { el.innerHTML='<div class="alert alert-error">Item not found in inventory.</div>'; return; }
-  if(item.qty<qty) { el.innerHTML=`<div class="alert alert-error">Only ${item.qty} in stock — can't deduct ${qty}.</div>`; return; }
-  item.qty-=qty;
-  const blankCost=item.cost!=null?Math.round(item.cost*qty*100)/100:null;
-  orderLog.unshift({id:Date.now(),date:new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),shop:shop||'',orderNum,note,type,brand,style:style||'',color,size,qty,blankCost});
+// ── PRESS ORDER CART ───────────────────────────────────────────────
+let pressCart = []; // [{type,brand,style,color,size,qty,blankCost,invItem}]
+
+function renderPressCart() {
+  const cartEl    = document.getElementById('press-cart');
+  const countEl   = document.getElementById('press-line-count');
+  const summaryEl = document.getElementById('press-summary');
+  const submitBtn = document.getElementById('press-submit-btn');
+
+  if(!pressCart.length) {
+    cartEl.innerHTML = '<div class="cart-empty">No garments added yet — select a blank below and click Add to order</div>';
+    countEl.textContent = 'No items added yet';
+    summaryEl.style.display = 'none';
+    submitBtn.style.display = 'none';
+    return;
+  }
+
+  const totalQty  = pressCart.reduce((s,l)=>s+l.qty, 0);
+  const totalCost = pressCart.reduce((s,l)=>s+(l.blankCost??0), 0);
+  const hasCost   = pressCart.some(l=>l.blankCost!=null);
+  countEl.textContent = `${pressCart.length} line${pressCart.length>1?'s':''} · ${totalQty} unit${totalQty>1?'s':''}`;
+
+  cartEl.innerHTML = pressCart.map((line, idx) => {
+    const costStr = line.blankCost!=null ? fmt(line.blankCost) : '—';
+    return `<div class="cart-item">
+      <div class="cart-item-name">${line.brand}${line.style?' <span class="style-tag">'+line.style+'</span>':''} ${line.color} ${line.size}</div>
+      <div class="cart-item-meta">${line.type} · qty ${line.qty}</div>
+      <div class="cart-item-cost">${costStr}</div>
+      <button class="btn btn-danger btn-sm" onclick="removePressLine(${idx})">✕</button>
+    </div>`;
+  }).join('');
+
+  document.getElementById('press-total-cost').textContent = hasCost ? '$'+totalCost.toFixed(2) : 'No costs set';
+  summaryEl.style.display = 'block';
+  submitBtn.style.display = '';
+}
+
+function removePressLine(idx) {
+  pressCart.splice(idx, 1);
+  renderPressCart();
+}
+
+function addPressLine() {
+  const type  = document.getElementById('press-type').value;
+  const brand = document.getElementById('press-brand').value;
+  const style = document.getElementById('press-style').value;
+  const color = document.getElementById('press-color').value;
+  const size  = document.getElementById('press-size').value;
+  const qty   = parseInt(document.getElementById('press-qty').value)||0;
+  const el    = document.getElementById('press-alert');
+
+  if(!type||!brand||!color||!size||qty<1) {
+    el.innerHTML='<div class="alert alert-error">Select a type, brand, color, size, and quantity before adding.</div>';
+    setTimeout(()=>el.innerHTML='', 3000); return;
+  }
+  const item = getItem(type,brand,style,color,size);
+  if(!item) {
+    el.innerHTML='<div class="alert alert-error">Item not found in inventory.</div>';
+    setTimeout(()=>el.innerHTML='', 3000); return;
+  }
+
+  // Check we have enough stock accounting for lines already in cart
+  const alreadyInCart = pressCart
+    .filter(l=>l.type===type&&l.brand===brand&&l.style===style&&l.color===color&&l.size===size)
+    .reduce((s,l)=>s+l.qty, 0);
+  const available = item.qty - alreadyInCart;
+  if(qty > available) {
+    el.innerHTML=`<div class="alert alert-error">Only ${available} available (${item.qty} in stock, ${alreadyInCart} already in this order).</div>`;
+    setTimeout(()=>el.innerHTML='', 4000); return;
+  }
+
+  const blankCost = item.cost!=null ? Math.round(item.cost*qty*100)/100 : null;
+  pressCart.push({type,brand,style:style||'',color,size,qty,blankCost,itemKey:`${type}|${brand}|${style}|${color}|${size}`});
+  renderPressCart();
+
+  // Reset size and qty, keep type/brand/style/color for quick multi-size entry
+  document.getElementById('press-size').value='';
+  document.getElementById('press-qty').value='1';
+  document.getElementById('press-cost-preview').style.display='none';
+  el.innerHTML='';
+}
+
+function submitPressOrder() {
+  if(!pressCart.length) return;
+  const shop     = document.getElementById('press-shop').value;
+  const orderNum = document.getElementById('press-order-num').value.trim();
+  const note     = document.getElementById('press-note').value.trim();
+  const el       = document.getElementById('press-alert');
+  const now      = new Date();
+  const dateStr  = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+  const isoDate  = now.toISOString();
+  const orderId  = Date.now();
+
+  pressCart.forEach((line, idx) => {
+    const item = getItem(line.type,line.brand,line.style,line.color,line.size);
+    if(!item) return;
+    item.qty -= line.qty;
+    orderLog.unshift({
+      id: orderId + idx,
+      isoDate, date: dateStr,
+      shop: shop||'', orderNum, note,
+      type:line.type, brand:line.brand, style:line.style,
+      color:line.color, size:line.size, qty:line.qty,
+      blankCost:line.blankCost
+    });
+  });
+
   save(); saveLog();
   if(shop&&!customShops.includes(shop)) { customShops.push(shop); saveOptions(); }
-  const costStr=blankCost!=null?` — blank cost: ${fmt(blankCost)}`:'';
-  el.innerHTML=`<div class="alert alert-success">Logged ${qty}× ${brand}${style?' '+style:''} ${color} ${size}${shop?' for '+shop:''}${orderNum?' #'+orderNum:''}${costStr}.</div>`;
-  setTimeout(()=>el.innerHTML='', 5000);
+
+  const totalQty  = pressCart.reduce((s,l)=>s+l.qty, 0);
+  const totalCost = pressCart.reduce((s,l)=>s+(l.blankCost??0), 0);
+  const hasCost   = pressCart.some(l=>l.blankCost!=null);
+  const costStr   = hasCost ? ` — total blank cost: ${fmt(totalCost)}` : '';
+
+  el.innerHTML=`<div class="alert alert-success">Order logged: ${pressCart.length} line${pressCart.length>1?'s':''}, ${totalQty} unit${totalQty>1?'s':''}${shop?' for '+shop:''}${orderNum?' #'+orderNum:''}${costStr}.</div>`;
+  setTimeout(()=>el.innerHTML='', 6000);
+
+  // Reset everything
+  pressCart = [];
+  renderPressCart();
   document.getElementById('press-order-num').value='';
   document.getElementById('press-note').value='';
-  updatePressColor();
-  document.getElementById('press-cost-preview').style.display='none';
+  populatePressDropdowns();
 }
 
 // ── ORDER LOG ──────────────────────────────────────────────────────
