@@ -204,20 +204,22 @@
     .size-cell.has-qty .size-cell-sublabel { color: var(--info-text); opacity: 0.7; }
 
 
+    /* COLLAPSIBLE REPORT SECTIONS */
+    .rpt-collapse-btn { background:none; border:none; cursor:pointer; font-size:11px; color:var(--text2); padding:0; line-height:1; display:inline-block; margin-left:8px; }
+    .rpt-collapse-header { display:flex; align-items:center; padding:12px 14px; cursor:pointer; user-select:none; border-radius:var(--radius-lg); }
+    .rpt-collapse-header.has-open-body { border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom:0.5px solid var(--border); }
+    .rpt-collapse-header:hover { background:var(--bg2); }
+    .rpt-collapse-header-text { font-weight:600; font-size:13px; flex:1; }
+    .rpt-collapse-body { overflow:auto; }
+
     /* PRINT */
     @media print {
       #topbar, .tabs, #report-controls, button, select, input { display: none !important; }
       body { background: white; color: black; }
       .card { border: 1px solid #ccc; box-shadow: none; }
       .rpt-section { page-break-inside: avoid; }
-    .rpt-collapse-btn { background:none; border:none; cursor:pointer; font-size:11px; color:var(--text2); padding:0; line-height:1; display:inline-block; margin-left:8px; transition:transform .2s; }
-    .rpt-collapse-btn.open { transform:rotate(90deg); }
-    .rpt-collapse-header { display:flex; align-items:center; padding:12px 14px; cursor:pointer; user-select:none; border-radius:var(--radius-lg); }
-    .rpt-collapse-header.has-open-body { border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom:0.5px solid var(--border); }
-    .rpt-collapse-header:hover { background:var(--bg2); }
-    .rpt-collapse-header-text { font-weight:600; font-size:13px; flex:1; }
-    .rpt-collapse-body { overflow:auto; }
-    .rpt-collapse-body[style*="display: none"] + * { border-top:none; }
+      .rpt-collapse-body { display: block !important; }
+      .rpt-collapse-header { cursor: default; }
     }
     /* REPORT STYLES */
     .rpt-section { margin-bottom: 2rem; }
