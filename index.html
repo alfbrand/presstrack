@@ -768,6 +768,18 @@
     </div>
     <p style="font-size:12px;color:var(--text2);margin-top:8px">Export saves all inventory and orders as a JSON file you can re-import any time.</p>
     <hr class="divider">
+
+    <!-- BACKFILL -->
+    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none;margin-bottom:4px" onclick="toggleBackfill()">
+      <p class="sub-label" style="margin:0">Backfill supplier info</p>
+      <span id="backfill-toggle-icon" style="font-size:12px;color:var(--text3)">▶ Show</span>
+    </div>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:0">Assign supplier and order # to existing stock log entries that are missing them.</p>
+    <div id="backfill-panel" style="display:none;margin-top:12px">
+      <div id="backfill-content"></div>
+    </div>
+
+    <hr class="divider">
     <p style="font-size:12px;color:var(--text3);text-align:center">PressTrack v1.0 — built with Claude</p>
   </div>
 </div>
@@ -1146,6 +1158,96 @@ function catAdd(field) {
     if(!customSuppliers.includes(val)) customSuppliers.push(val);
     saveOptions(); document.getElementById('cat-supplier-new').value='';
     renderCatSuppliers();
+  }
+}
+
+// ── BACKFILL SUPPLIER ──────────────────────────────────────────────
+function toggleBackfill() {
+  const panel = document.getElementById('backfill-panel');
+  const icon  = document.getElementById('backfill-toggle-icon');
+  const open  = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : '';
+  icon.textContent = open ? '▶ Show' : '▼ Hide';
+  if(!open) renderBackfill();
+}
+
+function renderBackfill() {
+  const container = document.getElementById('backfill-content');
+  const missing = stockLog.filter(e => !e.supplier);
+
+  if(!missing.length) {
+    container.innerHTML = `<div class="alert alert-success">All stock log entries already have a supplier assigned. ✓</div>`;
+    return;
+  }
+
+  // Group by brand + style + color for easy scanning
+  const groups = {};
+  missing.forEach(e => {
+    const key = `${e.brand}||${e.style||''}||${e.color}`;
+    if(!groups[key]) groups[key] = { label: `${e.brand}${e.style?' '+e.style:''} · ${e.color}`, entries: [] };
+    groups[key].entries.push(e);
+  });
+
+  const supplierOpts = ['', ...customSuppliers].map(s =>
+    `<option value="${s}">${s || '— select supplier —'}</option>`
+  ).join('');
+
+  let html = `<div style="margin-bottom:10px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+    <span style="font-size:12px;color:var(--text2)">${missing.length} entr${missing.length===1?'y':'ies'} missing supplier info</span>
+    <button class="btn btn-primary btn-sm" onclick="saveBackfill()">Save all changes</button>
+  </div>`;
+
+  Object.entries(groups).forEach(([key, group]) => {
+    html += `<div style="background:var(--bg2);border-radius:var(--radius);padding:10px 12px;margin-bottom:8px">
+      <div style="font-size:13px;font-weight:600;margin-bottom:8px;color:var(--text)">${group.label}</div>`;
+
+    group.entries.forEach(e => {
+      html += `<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;flex-wrap:wrap">
+        <span style="font-size:12px;color:var(--text2);min-width:120px;flex-shrink:0">${e.date} · <strong>${e.size}</strong> · ${e.qty} units${e.totalCost!=null?' · $'+e.totalCost.toFixed(2):''}</span>
+        <select class="backfill-supplier" data-id="${e.id}" style="flex:1;min-width:140px;font-size:13px;padding:5px 8px">${supplierOpts}</select>
+        <input class="backfill-order" data-id="${e.id}" type="text" placeholder="Supplier order #" value="${e.supplierOrder||''}" style="flex:1;min-width:120px;padding:5px 8px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+      </div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  html += `<button class="btn btn-primary btn-sm" style="margin-top:4px" onclick="saveBackfill()">Save all changes</button>`;
+  container.innerHTML = html;
+
+  // Pre-select existing supplier values
+  missing.forEach(e => {
+    const sel = container.querySelector(`.backfill-supplier[data-id="${e.id}"]`);
+    if(sel && e.supplier) sel.value = e.supplier;
+  });
+}
+
+function saveBackfill() {
+  const container = document.getElementById('backfill-content');
+  let saved = 0;
+
+  container.querySelectorAll('.backfill-supplier').forEach(sel => {
+    const id    = parseFloat(sel.dataset.id);
+    const entry = stockLog.find(e => e.id === id);
+    if(!entry) return;
+    const supplier      = sel.value || '';
+    const orderInput    = container.querySelector(`.backfill-order[data-id="${sel.dataset.id}"]`);
+    const supplierOrder = orderInput ? orderInput.value.trim() : '';
+    entry.supplier      = supplier;
+    entry.supplierOrder = supplierOrder;
+    if(supplier && !customSuppliers.includes(supplier)) customSuppliers.push(supplier);
+    saved++;
+  });
+
+  saveStockLog(); saveOptions();
+  renderBackfill(); // re-render to show remaining missing entries
+  if(saved) {
+    const msg = document.createElement('div');
+    msg.className = 'alert alert-success';
+    msg.style.marginBottom = '10px';
+    msg.textContent = `Saved supplier info for ${saved} entr${saved===1?'y':'ies'}.`;
+    document.getElementById('backfill-content').prepend(msg);
+    setTimeout(() => msg.remove(), 3000);
   }
 }
 
