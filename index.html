@@ -204,22 +204,20 @@
     .size-cell.has-qty .size-cell-sublabel { color: var(--info-text); opacity: 0.7; }
 
 
-    /* COLLAPSIBLE REPORT SECTIONS */
-    .rpt-collapse-btn { background:none; border:none; cursor:pointer; font-size:11px; color:var(--text2); padding:0; line-height:1; display:inline-block; margin-left:8px; }
-    .rpt-collapse-header { display:flex; align-items:center; padding:12px 14px; cursor:pointer; user-select:none; border-radius:var(--radius-lg); }
-    .rpt-collapse-header.has-open-body { border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom:0.5px solid var(--border); }
-    .rpt-collapse-header:hover { background:var(--bg2); }
-    .rpt-collapse-header-text { font-weight:600; font-size:13px; flex:1; }
-    .rpt-collapse-body { overflow:auto; }
-
     /* PRINT */
     @media print {
       #topbar, .tabs, #report-controls, button, select, input { display: none !important; }
       body { background: white; color: black; }
       .card { border: 1px solid #ccc; box-shadow: none; }
       .rpt-section { page-break-inside: avoid; }
-      .rpt-collapse-body { display: block !important; }
-      .rpt-collapse-header { cursor: default; }
+    .rpt-collapse-btn { background:none; border:none; cursor:pointer; font-size:11px; color:var(--text2); padding:0; line-height:1; display:inline-block; margin-left:8px; transition:transform .2s; }
+    .rpt-collapse-btn.open { transform:rotate(90deg); }
+    .rpt-collapse-header { display:flex; align-items:center; padding:12px 14px; cursor:pointer; user-select:none; border-radius:var(--radius-lg); }
+    .rpt-collapse-header.has-open-body { border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom:0.5px solid var(--border); }
+    .rpt-collapse-header:hover { background:var(--bg2); }
+    .rpt-collapse-header-text { font-weight:600; font-size:13px; flex:1; }
+    .rpt-collapse-body { overflow:auto; }
+    .rpt-collapse-body[style*="display: none"] + * { border-top:none; }
     }
     /* REPORT STYLES */
     .rpt-section { margin-bottom: 2rem; }
@@ -435,7 +433,11 @@
 
         <!-- Order header -->
         <p class="sub-label">Order details</p>
-        <div class="g3" style="margin-bottom:12px">
+        <div class="g4" style="margin-bottom:12px">
+          <div class="field">
+            <span class="label">Date</span>
+            <input type="date" id="press-date" style="padding:9px 11px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+          </div>
           <div class="field">
             <span class="label">Shop name</span>
             <select id="press-shop" onchange="handleCombo('shop')"></select>
@@ -530,7 +532,7 @@
       <div id="log-stats" style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap"></div>
       <div class="tbl-wrap">
         <table>
-          <thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th><th>Note</th><th></th></tr></thead>
+          <thead><tr><th id="log-date-th" onclick="toggleLogSort()" style="cursor:pointer;user-select:none" title="Click to sort">Date <span id="log-sort-indicator">▼</span></th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th><th>Note</th><th></th></tr></thead>
           <tbody id="log-body"></tbody>
         </table>
       </div>
@@ -1585,6 +1587,13 @@ function clearAddForm() {
 
 // ── PRESS ORDER ────────────────────────────────────────────────────
 function populatePressDropdowns() {
+  // Pre-fill date with today
+  const today = new Date();
+  const yyyy = today.getFullYear();
+  const mm = String(today.getMonth()+1).padStart(2,'0');
+  const dd = String(today.getDate()).padStart(2,'0');
+  document.getElementById('press-date').value = `${yyyy}-${mm}-${dd}`;
+
   buildComboSelect('press-shop','shop',customShops,'');
   document.getElementById('press-shop').onchange=function(){ handleCombo('shop'); };
   buildSimpleSelect('press-type','type',[...new Set(inventory.map(i=>i.type))]);
@@ -1725,7 +1734,15 @@ function submitPressOrder() {
   const orderNum = document.getElementById('press-order-num').value.trim();
   const note     = document.getElementById('press-note').value.trim();
   const el       = document.getElementById('press-alert');
-  const now      = new Date();
+
+  // Use the selected date, falling back to today if blank
+  const dateInputVal = document.getElementById('press-date').value;
+  let now;
+  if(dateInputVal) {
+    now = new Date(dateInputVal + 'T12:00:00'); // noon to avoid timezone shift
+  } else {
+    now = new Date();
+  }
   const dateStr  = now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   const isoDate  = now.toISOString();
   const orderId  = Date.now();
@@ -1758,19 +1775,36 @@ function submitPressOrder() {
   // Reset everything
   pressCart = [];
   renderPressCart();
+  const _t = new Date();
+  document.getElementById('press-date').value = `${_t.getFullYear()}-${String(_t.getMonth()+1).padStart(2,'0')}-${String(_t.getDate()).padStart(2,'0')}`;
   document.getElementById('press-order-num').value='';
   document.getElementById('press-note').value='';
   populatePressDropdowns();
 }
 
 // ── ORDER LOG ──────────────────────────────────────────────────────
+let logSortDir = 'desc'; // 'desc' = newest first, 'asc' = oldest first
+
+function toggleLogSort() {
+  logSortDir = logSortDir === 'desc' ? 'asc' : 'desc';
+  document.getElementById('log-sort-indicator').textContent = logSortDir === 'desc' ? '▼' : '▲';
+  renderLog();
+}
+
 function updateLogFilters() {
   buildFilterSelect('log-filter-shop','shops',orderLog.map(o=>o.shop).filter(Boolean));
   buildFilterSelect('log-filter-type','types',orderLog.map(o=>o.type));
 }
 function renderLog() {
   const fs=document.getElementById('log-filter-shop').value, ft=document.getElementById('log-filter-type').value;
-  const rows=orderLog.filter(o=>(!fs||o.shop===fs)&&(!ft||o.type===ft));
+  let rows=orderLog.filter(o=>(!fs||o.shop===fs)&&(!ft||o.type===ft));
+
+  // Sort by date
+  rows.sort((a,b) => {
+    const da = a.isoDate ? new Date(a.isoDate) : new Date(a.date);
+    const db = b.isoDate ? new Date(b.isoDate) : new Date(b.date);
+    return logSortDir === 'desc' ? db - da : da - db;
+  });
   const totalUnits=rows.reduce((s,o)=>s+o.qty,0);
   const totalCost=rows.reduce((s,o)=>s+(o.blankCost!=null?o.blankCost:0),0);
   const hasCost=rows.some(o=>o.blankCost!=null);
