@@ -238,6 +238,18 @@
     @media (max-width: 600px) { .rpt-two-col { grid-template-columns: 1fr; } }
     .rpt-empty { color: var(--text3); font-size: 13px; padding: 1rem 0; }
 
+    /* ORDER LOG GROUPS */
+    .order-group { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 10px; overflow: hidden; }
+    .order-group-header { display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: var(--bg2); flex-wrap: wrap; cursor: pointer; user-select: none; }
+    .order-group-header:hover { background: var(--bg3); }
+    .order-group-num { font-size: 14px; font-weight: 700; color: var(--text); }
+    .order-group-meta { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; flex: 1; }
+    .order-group-meta-item { font-size: 12px; color: var(--text2); }
+    .order-group-meta-item strong { color: var(--text); font-weight: 600; }
+    .order-group-toggle { font-size: 11px; color: var(--text3); margin-left: auto; flex-shrink: 0; }
+    .order-group-lines { border-top: 0.5px solid var(--border); }
+    .order-group-actions { display: flex; gap: 6px; align-items: center; }
+
     /* VERSION BADGE */
     .version { font-size: 11px; color: var(--text3); }
   </style>
@@ -340,6 +352,21 @@
             </div>
           </div>
         </div>
+        <div class="g2" style="margin-bottom:12px;max-width:480px">
+          <div class="field">
+            <span class="label">Supplier <span style="font-weight:400;color:var(--text3)">(optional)</span></span>
+            <select id="add-supplier" onchange="handleCombo('supplier')"></select>
+            <div class="new-entry-row" id="new-supplier-row" style="display:none">
+              <input type="text" id="new-supplier-input" placeholder="e.g. S&S Activewear">
+              <button class="btn" onclick="confirmNew('supplier')">Add</button>
+              <button class="btn" onclick="cancelNew('supplier')">✕</button>
+            </div>
+          </div>
+          <div class="field">
+            <span class="label">Supplier order # <span style="font-weight:400;color:var(--text3)">(optional)</span></span>
+            <input type="text" id="add-supplier-order" placeholder="e.g. INV-8842">
+          </div>
+        </div>
 
         <!-- SINGLE ENTRY MODE -->
         </div><!-- /add-shared-selectors -->
@@ -409,7 +436,7 @@
           <div style="background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
             <strong style="color:var(--text);display:block;margin-bottom:6px">Required columns:</strong>
             type, brand, style, color, size, qty, cost<br>
-            <span style="color:var(--text3);margin-top:4px;display:block">size must be one of: XS, S, M, L, XL, 2XL, 3XL, 4XL, One size &nbsp;·&nbsp; cost is per blank in dollars &nbsp;·&nbsp; date_added format: YYYY-MM-DD (leave blank to use today) &nbsp;·&nbsp; style is optional</span>
+            <span style="color:var(--text3);margin-top:4px;display:block">size must be one of: XS, S, M, L, XL, 2XL, 3XL, 4XL, One size &nbsp;·&nbsp; cost is per blank in dollars &nbsp;·&nbsp; date_added format: YYYY-MM-DD (leave blank to use today) &nbsp;·&nbsp; supplier and supplier_order are optional &nbsp;·&nbsp; style is optional</span>
           </div>
 
           <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
@@ -450,7 +477,7 @@
             </div>
           </div>
           <div class="field">
-            <span class="label">Order #</span>
+            <span class="label">Order # <span style="color:var(--danger-text)">*</span></span>
             <input type="text" id="press-order-num" placeholder="e.g. 1042, ORD-209">
           </div>
           <div class="field">
@@ -529,15 +556,13 @@
           <select id="log-filter-shop" onchange="renderLog()"><option value="">All shops</option></select>
           <select id="log-filter-type" onchange="renderLog()"><option value="">All types</option></select>
         </div>
-        <button class="btn btn-danger btn-sm" onclick="clearLog()">Clear log</button>
+        <div style="display:flex;gap:8px;align-items:center">
+          <button class="btn btn-sm" onclick="toggleLogSort()" id="log-sort-btn" title="Toggle date sort">Date ▼</button>
+          <button class="btn btn-danger btn-sm" onclick="clearLog()">Clear log</button>
+        </div>
       </div>
       <div id="log-stats" style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap"></div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th id="log-date-th" onclick="toggleLogSort()" style="cursor:pointer;user-select:none" title="Click to sort">Date <span id="log-sort-indicator">▼</span></th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th><th>Note</th><th></th></tr></thead>
-          <tbody id="log-body"></tbody>
-        </table>
-      </div>
+      <div id="log-groups"></div>
     </div>
 
     <!-- ── REPORTS ── -->
@@ -652,6 +677,7 @@
       <button class="cat-tab" onclick="showCatTab('colors')">Colors</button>
       <button class="cat-tab" onclick="showCatTab('types')">Types</button>
       <button class="cat-tab" onclick="showCatTab('shops')">Shops</button>
+      <button class="cat-tab" onclick="showCatTab('suppliers')">Suppliers</button>
     </div>
 
     <!-- BRANDS -->
@@ -708,6 +734,15 @@
       </div>
     </div>
 
+    <!-- SUPPLIERS -->
+    <div class="cat-panel" id="cat-suppliers">
+      <div class="cat-list" id="cat-suppliers-list"></div>
+      <div style="display:flex;gap:6px">
+        <input type="text" id="cat-supplier-new" placeholder="Add supplier…" style="flex:1;font-size:13px;padding:6px 9px">
+        <button class="btn btn-sm" onclick="catAdd('supplier')">Add</button>
+      </div>
+    </div>
+
     <hr class="divider">
 
     <!-- PREFERENCES -->
@@ -759,15 +794,17 @@ const BRAND_STYLES   = {
 let customTypes  = JSON.parse(localStorage.getItem('pt_types')   || 'null') || [...DEFAULT_TYPES];
 let customBrands = JSON.parse(localStorage.getItem('pt_brands')  || 'null') || [...DEFAULT_BRANDS];
 let customColors = JSON.parse(localStorage.getItem('pt_colors')  || 'null') || [...DEFAULT_COLORS];
-let customShops  = JSON.parse(localStorage.getItem('pt_shops')   || 'null') || [];
-let brandStyles  = JSON.parse(localStorage.getItem('pt_bstyles') || 'null') || {};
+let customShops     = JSON.parse(localStorage.getItem('pt_shops')     || 'null') || [];
+let customSuppliers = JSON.parse(localStorage.getItem('pt_suppliers') || 'null') || [];
+let brandStyles     = JSON.parse(localStorage.getItem('pt_bstyles')   || 'null') || {};
 
 function saveOptions() {
-  localStorage.setItem('pt_types',   JSON.stringify(customTypes));
-  localStorage.setItem('pt_brands',  JSON.stringify(customBrands));
-  localStorage.setItem('pt_colors',  JSON.stringify(customColors));
-  localStorage.setItem('pt_shops',   JSON.stringify(customShops));
-  localStorage.setItem('pt_bstyles', JSON.stringify(brandStyles));
+  localStorage.setItem('pt_types',     JSON.stringify(customTypes));
+  localStorage.setItem('pt_brands',    JSON.stringify(customBrands));
+  localStorage.setItem('pt_colors',    JSON.stringify(customColors));
+  localStorage.setItem('pt_shops',     JSON.stringify(customShops));
+  localStorage.setItem('pt_suppliers', JSON.stringify(customSuppliers));
+  localStorage.setItem('pt_bstyles',   JSON.stringify(brandStyles));
 }
 function save()    { try { localStorage.setItem('pt_inv', JSON.stringify(inventory)); } catch(e){} }
 function saveLog()   { try { localStorage.setItem('pt_log',  JSON.stringify(orderLog)); } catch(e){} }
@@ -829,6 +866,7 @@ function openSettings() {
   renderCatColors();
   renderCatTypes();
   renderCatShops();
+  renderCatSuppliers();
   populateCatStyleBrandDropdowns();
   document.getElementById('settings-overlay').classList.add('open');
 }
@@ -836,7 +874,7 @@ function openSettings() {
 function showCatTab(tab) {
   document.querySelectorAll('.cat-tab').forEach((el,i)=>{
     el.classList.remove('active');
-    if(['brands','styles','colors','types','shops'][i]===tab) el.classList.add('active');
+    if(['brands','styles','colors','types','shops','suppliers'][i]===tab) el.classList.add('active');
   });
   document.querySelectorAll('.cat-panel').forEach(el=>el.classList.remove('active'));
   document.getElementById('cat-'+tab).classList.add('active');
@@ -986,12 +1024,27 @@ function renderCatShops() {
   });
 }
 
+function renderCatSuppliers() {
+  const list = document.getElementById('cat-suppliers-list');
+  list.innerHTML = '';
+  const suppliers = [...customSuppliers].sort();
+  if(!suppliers.length) { list.innerHTML='<div class="cat-empty">No suppliers yet</div>'; return; }
+  suppliers.forEach(supplier => {
+    const item = makeCatItem(supplier,
+      newName => { renameSupplier(supplier, newName); renderCatSuppliers(); },
+      ()      => { if(!confirmDelete('supplier', supplier)) return; deleteSupplier(supplier); renderCatSuppliers(); }
+    );
+    list.appendChild(item);
+  });
+}
+
 function confirmDelete(type, name, brand) {
-  const inUse = type==='brand'  ? inventory.some(i=>i.brand===name)
-              : type==='style'  ? inventory.some(i=>i.brand===brand&&i.style===name)
-              : type==='color'  ? inventory.some(i=>i.color===name)
-              : type==='type'   ? inventory.some(i=>i.type===name)
-              : type==='shop'   ? orderLog.some(o=>o.shop===name)
+  const inUse = type==='brand'    ? inventory.some(i=>i.brand===name)
+              : type==='style'    ? inventory.some(i=>i.brand===brand&&i.style===name)
+              : type==='color'    ? inventory.some(i=>i.color===name)
+              : type==='type'     ? inventory.some(i=>i.type===name)
+              : type==='shop'     ? orderLog.some(o=>o.shop===name)
+              : type==='supplier' ? stockLog.some(e=>e.supplier===name)
               : false;
   const warn = inUse ? `\n\n⚠️ This ${type} is used in your inventory or order log. Removing it from the catalog won't delete those records, but it will disappear from dropdowns.` : '';
   return confirm(`Remove "${name}" from the ${type} list?${warn}`);
@@ -1038,25 +1091,25 @@ function renameShop(oldVal, newVal) {
   orderLog.forEach(o=>{ if(o.shop===oldVal) o.shop=newVal; });
   saveOptions(); saveLog();
 }
+function renameSupplier(oldVal, newVal) {
+  if(!newVal || newVal===oldVal) return;
+  customSuppliers = customSuppliers.map(v=>v===oldVal?newVal:v);
+  stockLog.forEach(e=>{ if(e.supplier===oldVal) e.supplier=newVal; });
+  saveOptions(); saveStockLog();
+}
 
 // ── DELETE FUNCTIONS ───────────────────────────────────────────────
-function deleteBrand(val) {
-  customBrands = customBrands.filter(v=>v!==val);
-  delete brandStyles[val];
-  saveOptions();
-}
+function deleteBrand(val)    { customBrands=customBrands.filter(v=>v!==val); delete brandStyles[val]; saveOptions(); }
 function deleteStyle(brand, val) {
-  // Seed brandStyles from defaults if not yet customised, so built-in styles are deletable
   if(!brandStyles[brand]) brandStyles[brand] = [...(BRAND_STYLES[brand] || [])];
-  else {
-    (BRAND_STYLES[brand] || []).forEach(s => { if(!brandStyles[brand].includes(s)) brandStyles[brand].push(s); });
-  }
+  else { (BRAND_STYLES[brand] || []).forEach(s => { if(!brandStyles[brand].includes(s)) brandStyles[brand].push(s); }); }
   brandStyles[brand] = brandStyles[brand].filter(s => s !== val);
   saveOptions();
 }
-function deleteColor(val) { customColors=customColors.filter(v=>v!==val); saveOptions(); }
-function deleteType(val)  { customTypes=customTypes.filter(v=>v!==val);   saveOptions(); }
-function deleteShop(val)  { customShops=customShops.filter(v=>v!==val);   saveOptions(); }
+function deleteColor(val)    { customColors=customColors.filter(v=>v!==val);    saveOptions(); }
+function deleteType(val)     { customTypes=customTypes.filter(v=>v!==val);      saveOptions(); }
+function deleteShop(val)     { customShops=customShops.filter(v=>v!==val);      saveOptions(); }
+function deleteSupplier(val) { customSuppliers=customSuppliers.filter(v=>v!==val); saveOptions(); }
 
 // ── ADD FROM CATALOG PANEL ─────────────────────────────────────────
 function catAdd(field) {
@@ -1088,12 +1141,17 @@ function catAdd(field) {
     if(!customShops.includes(val)) customShops.push(val);
     saveOptions(); document.getElementById('cat-shop-new').value='';
     renderCatShops();
+  } else if(field==='supplier') {
+    const val=document.getElementById('cat-supplier-new').value.trim(); if(!val) return;
+    if(!customSuppliers.includes(val)) customSuppliers.push(val);
+    saveOptions(); document.getElementById('cat-supplier-new').value='';
+    renderCatSuppliers();
   }
 }
 
 // ── EXPORT / IMPORT ────────────────────────────────────────────────
 function exportData() {
-  const data = { inventory, orderLog, stockLog, customTypes, customBrands, customColors, customShops, brandStyles, exportedAt: new Date().toISOString() };
+  const data = { inventory, orderLog, stockLog, customTypes, customBrands, customColors, customShops, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1115,6 +1173,7 @@ function importData(e) {
       customBrands = data.customBrands || [...DEFAULT_BRANDS];
       customColors = data.customColors || [...DEFAULT_COLORS];
       customShops  = data.customShops  || [];
+      customSuppliers = data.customSuppliers || [];
       brandStyles  = data.brandStyles  || {};
       save(); saveLog(); saveStockLog(); saveOptions();
       closeSettings();
@@ -1147,7 +1206,7 @@ function buildFilterSelect(id, allLabel, vals) {
 
 // ── COMBO HANDLERS ─────────────────────────────────────────────────
 function handleCombo(field) {
-  const map = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop' };
+  const map = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop', supplier:'add-supplier' };
   const sel = document.getElementById(map[field]);
   if(!sel || sel.value !== '__new__') return;
   sel.style.display = 'none'; sel.value = '';
@@ -1155,14 +1214,15 @@ function handleCombo(field) {
   document.getElementById(`new-${field}-input`).focus();
 }
 function confirmNew(field) {
-  const map  = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop' };
-  const labs = { type:'type', brand:'brand', style:'style / SKU', color:'color', shop:'shop' };
+  const map  = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop', supplier:'add-supplier' };
+  const labs = { type:'type', brand:'brand', style:'style / SKU', color:'color', shop:'shop', supplier:'supplier' };
   const input = document.getElementById(`new-${field}-input`);
   const val = input.value.trim(); if(!val) return;
-  if(field==='type'  && !customTypes.includes(val))  customTypes.push(val);
-  if(field==='brand' && !customBrands.includes(val)) customBrands.push(val);
-  if(field==='color' && !customColors.includes(val)) customColors.push(val);
-  if(field==='shop'  && !customShops.includes(val))  customShops.push(val);
+  if(field==='type'     && !customTypes.includes(val))     customTypes.push(val);
+  if(field==='brand'    && !customBrands.includes(val))    customBrands.push(val);
+  if(field==='color'    && !customColors.includes(val))    customColors.push(val);
+  if(field==='shop'     && !customShops.includes(val))     customShops.push(val);
+  if(field==='supplier' && !customSuppliers.includes(val)) customSuppliers.push(val);
   if(field==='style') {
     const brand = document.getElementById('add-brand').value;
     if(brand && brand !== '__new__') {
@@ -1176,14 +1236,14 @@ function confirmNew(field) {
     buildComboSelect('add-style', labs.style, stylesForBrand(brand), val);
     document.getElementById('add-style').value = val;
   } else {
-    const lists = { type:customTypes, brand:customBrands, color:customColors, shop:customShops };
+    const lists = { type:customTypes, brand:customBrands, color:customColors, shop:customShops, supplier:customSuppliers };
     buildComboSelect(map[field], labs[field], lists[field]||[], val);
     document.getElementById(map[field]).value = val;
     if(field === 'brand') onAddBrandChange();
   }
 }
 function cancelNew(field) {
-  const map = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop' };
+  const map = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop', supplier:'add-supplier' };
   document.getElementById(`new-${field}-input`).value = '';
   const sel = document.getElementById(map[field]);
   if(sel) { sel.style.display = ''; sel.value = ''; }
@@ -1207,9 +1267,10 @@ function onAddBrandChange() {
 }
 
 function populateAddDropdowns() {
-  buildComboSelect('add-type',  'type',  customTypes,  '');
-  buildComboSelect('add-brand', 'brand', customBrands, '');
-  buildComboSelect('add-color', 'color', customColors, '');
+  buildComboSelect('add-type',     'type',     customTypes,     '');
+  buildComboSelect('add-brand',    'brand',    customBrands,    '');
+  buildComboSelect('add-color',    'color',    customColors,    '');
+  buildComboSelect('add-supplier', 'supplier', customSuppliers, '');
   document.getElementById('add-brand').onchange = function() {
     handleCombo('brand');
     if(this.value !== '__new__') onAddBrandChange();
@@ -1480,6 +1541,8 @@ function addBulkStock() {
   const brand = document.getElementById('add-brand').value;
   const style = document.getElementById('add-style').value;
   const color = document.getElementById('add-color').value;
+  const supplier = document.getElementById('add-supplier').value||'';
+  const supplierOrder = document.getElementById('add-supplier-order').value.trim();
   const el = document.getElementById('add-alert');
 
   if(!type||!brand||!color) { el.innerHTML='<div class="alert alert-error">Please select type, brand, and color first.</div>'; return; }
@@ -1498,6 +1561,7 @@ function addBulkStock() {
     if(!brandStyles[brand].includes(style)) brandStyles[brand].push(style);
     saveOptions();
   }
+  if(supplier && !customSuppliers.includes(supplier)) { customSuppliers.push(supplier); saveOptions(); }
 
   let added = 0;
   entries.forEach(({size, qty, cost}) => {
@@ -1515,13 +1579,14 @@ function addBulkStock() {
       isoDate: now.toISOString(),
       date: now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
       type, brand, style:style||'', color, size, qty,
-      cost: cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null
+      cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null,
+      supplier, supplierOrder
     });
   });
   saveStockLog();
   const totalQty = entries.reduce((s,e)=>s+e.qty, 0);
   const sizeList = entries.map(e=>`${e.size}×${e.qty}${e.cost!=null?' ($'+e.cost.toFixed(2)+')':''}`).join(', ');
-  el.innerHTML=`<div class="alert alert-success">Added ${totalQty} units across ${added} size${added>1?'s':''} for ${brand}${style?' '+style:''} ${color} (${type}): ${sizeList}.</div>`;
+  el.innerHTML=`<div class="alert alert-success">Added ${totalQty} units across ${added} size${added>1?'s':''} for ${brand}${style?' '+style:''} ${color} (${type})${supplier?' via '+supplier:''}: ${sizeList}.</div>`;
   setTimeout(()=>el.innerHTML='', 6000);
 
   // Clear qty and cost fields, keep garment selection for quick color/style variants
@@ -1544,6 +1609,8 @@ function addStock() {
   const qty=parseInt(document.getElementById('add-qty').value)||0;
   const costRaw=document.getElementById('add-cost').value;
   const cost=costRaw!==''?Math.round(parseFloat(costRaw)*100)/100:null;
+  const supplier=document.getElementById('add-supplier').value||'';
+  const supplierOrder=document.getElementById('add-supplier-order').value.trim();
   const el=document.getElementById('add-alert');
   if(!type||!brand||!color||!size||qty<1) { el.innerHTML='<div class="alert alert-error">Please fill in type, brand, color, size, and a valid quantity.</div>'; return; }
   if(style&&brand&&style!=='__new__') {
@@ -1551,6 +1618,7 @@ function addStock() {
     if(!brandStyles[brand].includes(style)) brandStyles[brand].push(style);
     saveOptions();
   }
+  if(supplier && !customSuppliers.includes(supplier)) { customSuppliers.push(supplier); saveOptions(); }
   const existing=getItem(type,brand,style||'',color,size);
   if(existing) { existing.qty+=qty; if(cost!==null) existing.cost=cost; }
   else { inventory.push({type,brand,style:style||'',color,size,qty,cost}); }
@@ -1560,10 +1628,11 @@ function addStock() {
     isoDate: new Date().toISOString(),
     date: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
     type, brand, style:style||'', color, size, qty,
-    cost: cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null
+    cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null,
+    supplier, supplierOrder
   });
   saveStockLog();
-  el.innerHTML=`<div class="alert alert-success">Added ${qty}× ${brand}${style?' '+style:''} ${color} ${size} (${type})${cost!=null?' at $'+cost.toFixed(2)+'/unit':''}.</div>`;
+  el.innerHTML=`<div class="alert alert-success">Added ${qty}× ${brand}${style?' '+style:''} ${color} ${size} (${type})${cost!=null?' at $'+cost.toFixed(2)+'/unit':''}${supplier?' via '+supplier:''}.</div>`;
   setTimeout(()=>el.innerHTML='', 3500);
 }
 
@@ -1572,6 +1641,8 @@ function clearAddForm() {
   document.getElementById('add-brand').value='';
   document.getElementById('add-qty').value='12';
   document.getElementById('add-cost').value='';
+  document.getElementById('add-supplier').value='';
+  document.getElementById('add-supplier-order').value='';
   const styleEl=document.getElementById('add-style');
   styleEl.innerHTML='<option value="">Select style</option>'; styleEl.disabled=true;
   document.getElementById('style-hint').textContent='Select a brand first';
@@ -1737,6 +1808,12 @@ function submitPressOrder() {
   const note     = document.getElementById('press-note').value.trim();
   const el       = document.getElementById('press-alert');
 
+  if(!pressCart.length) return;
+  if(!orderNum) {
+    el.innerHTML='<div class="alert alert-error">Please enter an order number before submitting.</div>';
+    document.getElementById('press-order-num').focus();
+    setTimeout(()=>el.innerHTML='', 4000); return;
+  }
   // Use the selected date, falling back to today if blank
   const dateInputVal = document.getElementById('press-date').value;
   let now;
@@ -1789,7 +1866,8 @@ let logSortDir = 'desc'; // 'desc' = newest first, 'asc' = oldest first
 
 function toggleLogSort() {
   logSortDir = logSortDir === 'desc' ? 'asc' : 'desc';
-  document.getElementById('log-sort-indicator').textContent = logSortDir === 'desc' ? '▼' : '▲';
+  const btn = document.getElementById('log-sort-btn');
+  if(btn) btn.textContent = logSortDir === 'desc' ? 'Date ▼' : 'Date ▲';
   renderLog();
 }
 
@@ -1797,36 +1875,96 @@ function updateLogFilters() {
   buildFilterSelect('log-filter-shop','shops',orderLog.map(o=>o.shop).filter(Boolean));
   buildFilterSelect('log-filter-type','types',orderLog.map(o=>o.type));
 }
-function renderLog() {
-  const fs=document.getElementById('log-filter-shop').value, ft=document.getElementById('log-filter-type').value;
-  let rows=orderLog.filter(o=>(!fs||o.shop===fs)&&(!ft||o.type===ft));
 
-  // Sort by date
-  rows.sort((a,b) => {
-    const da = a.isoDate ? new Date(a.isoDate) : new Date(a.date);
-    const db = b.isoDate ? new Date(b.isoDate) : new Date(b.date);
-    return logSortDir === 'desc' ? db - da : da - db;
-  });
-  const totalUnits=rows.reduce((s,o)=>s+o.qty,0);
-  const totalCost=rows.reduce((s,o)=>s+(o.blankCost!=null?o.blankCost:0),0);
-  const hasCost=rows.some(o=>o.blankCost!=null);
-  document.getElementById('log-stats').innerHTML=
-    `<div class="stat" style="padding:8px 14px"><div class="stat-label">Orders logged</div><div class="stat-val" style="font-size:17px">${rows.length}</div></div>`+
+function renderLog() {
+  const fs = document.getElementById('log-filter-shop').value;
+  const ft = document.getElementById('log-filter-type').value;
+  const rows = orderLog.filter(o=>(!fs||o.shop===fs)&&(!ft||o.type===ft));
+
+  // Summary stats
+  const totalUnits   = rows.reduce((s,o)=>s+o.qty, 0);
+  const totalCost    = rows.reduce((s,o)=>s+(o.blankCost??0), 0);
+  const hasCost      = rows.some(o=>o.blankCost!=null);
+  const uniqueOrders = new Set(rows.map(o=>o.orderNum).filter(Boolean)).size;
+  document.getElementById('log-stats').innerHTML =
+    `<div class="stat" style="padding:8px 14px"><div class="stat-label">Orders</div><div class="stat-val" style="font-size:17px">${uniqueOrders}</div></div>`+
+    `<div class="stat" style="padding:8px 14px"><div class="stat-label">Line items</div><div class="stat-val" style="font-size:17px">${rows.length}</div></div>`+
     `<div class="stat" style="padding:8px 14px"><div class="stat-label">Units pressed</div><div class="stat-val" style="font-size:17px">${totalUnits}</div></div>`+
     (hasCost?`<div class="stat" style="padding:8px 14px"><div class="stat-label">Total blank cost</div><div class="stat-val" style="font-size:17px">$${totalCost.toFixed(2)}</div></div>`:'');
-  const tbody=document.getElementById('log-body');
-  if(!rows.length) { tbody.innerHTML=`<tr><td colspan="11" class="empty">No orders logged yet</td></tr>`; return; }
-  tbody.innerHTML=rows.map(o=>`<tr>
-    <td style="color:var(--text2);font-size:12px">${o.date}</td>
-    <td>${o.shop?`<span class="shop-pill">${o.shop}</span>`:''}</td>
-    <td style="font-size:12px;color:var(--text2)">${o.orderNum||'—'}</td>
-    <td>${o.type}</td><td>${o.brand}</td>
-    <td><span class="style-tag">${o.style||'—'}</span></td>
-    <td>${o.color}</td><td style="font-weight:600">${o.size}</td><td style="font-weight:600">${o.qty}</td>
-    <td style="color:var(--text2)">${o.blankCost!=null?fmt(o.blankCost):'—'}</td>
-    <td style="white-space:normal;font-size:12px;color:var(--text2);max-width:140px">${o.note||''}</td>
-    <td><button class="btn btn-sm" onclick="openEditLog(${o.id})">Edit</button></td>
-  </tr>`).join('');
+
+  const container = document.getElementById('log-groups');
+  if(!rows.length) { container.innerHTML=`<div class="empty">No orders logged yet</div>`; return; }
+
+  // Group by orderNum; ungrouped lines get a unique key per entry
+  const groups = {};
+  rows.forEach(o => {
+    const key = o.orderNum || `__ungrouped_${o.id}`;
+    if(!groups[key]) groups[key] = [];
+    groups[key].push(o);
+  });
+
+  // Sort groups by most recent line item date
+  const sortedKeys = Object.keys(groups).sort((a,b) => {
+    const da = Math.max(...groups[a].map(o=>new Date(o.isoDate||o.date).getTime()));
+    const db = Math.max(...groups[b].map(o=>new Date(o.isoDate||o.date).getTime()));
+    return logSortDir === 'desc' ? db - da : da - db;
+  });
+
+  container.innerHTML = '';
+  sortedKeys.forEach(key => {
+    const lines      = groups[key];
+    const rep        = lines[0];
+    const orderNum   = rep.orderNum || '(no order #)';
+    const totalQty   = lines.reduce((s,o)=>s+o.qty, 0);
+    const groupCost  = lines.reduce((s,o)=>s+(o.blankCost??0), 0);
+    const groupHasCost = lines.some(o=>o.blankCost!=null);
+
+    const groupEl = document.createElement('div');
+    groupEl.className = 'order-group';
+
+    // Header
+    const hdr = document.createElement('div');
+    hdr.className = 'order-group-header';
+    hdr.innerHTML = `
+      <div class="order-group-num">#${orderNum}</div>
+      <div class="order-group-meta">
+        ${rep.shop ? `<span class="shop-pill">${rep.shop}</span>` : ''}
+        <span class="order-group-meta-item"><strong>${rep.date}</strong></span>
+        <span class="order-group-meta-item"><strong>${totalQty}</strong> unit${totalQty!==1?'s':''}</span>
+        ${groupHasCost ? `<span class="order-group-meta-item"><strong>$${groupCost.toFixed(2)}</strong> blank cost</span>` : ''}
+        ${rep.note ? `<span class="order-group-meta-item" style="font-style:italic;color:var(--text3)">${rep.note}</span>` : ''}
+      </div>
+      <span class="order-group-toggle">▼</span>`;
+
+    // Line items table
+    const linesEl = document.createElement('div');
+    linesEl.className = 'order-group-lines';
+    linesEl.innerHTML = `<div style="overflow-x:auto"><table>
+      <thead><tr><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th><th></th></tr></thead>
+      <tbody>${lines.map(o=>`<tr>
+        <td>${o.type}</td>
+        <td>${o.brand}</td>
+        <td><span class="style-tag">${o.style||'—'}</span></td>
+        <td>${o.color}</td>
+        <td style="font-weight:600">${o.size}</td>
+        <td style="font-weight:600">${o.qty}</td>
+        <td style="color:var(--text2)">${o.blankCost!=null?fmt(o.blankCost):'—'}</td>
+        <td><button class="btn btn-sm" onclick="openEditLog(${o.id})">Edit</button></td>
+      </tr>`).join('')}</tbody>
+    </table></div>`;
+
+    // Collapse toggle
+    let collapsed = false;
+    hdr.addEventListener('click', () => {
+      collapsed = !collapsed;
+      linesEl.style.display = collapsed ? 'none' : '';
+      hdr.querySelector('.order-group-toggle').textContent = collapsed ? '▶' : '▼';
+    });
+
+    groupEl.appendChild(hdr);
+    groupEl.appendChild(linesEl);
+    container.appendChild(groupEl);
+  });
 }
 function openEditLog(id) {
   const entry = orderLog.find(o => o.id === id);
@@ -1909,17 +2047,17 @@ function clearLog() {
 }
 
 // ── CSV IMPORT ─────────────────────────────────────────────────────
-const CSV_TEMPLATE_HEADERS = ['type','brand','style','color','size','qty','cost','date_added'];
+const CSV_TEMPLATE_HEADERS = ['type','brand','style','color','size','qty','cost','date_added','supplier','supplier_order'];
 const CSV_VALID_SIZES = [...SIZES, ...SIZES_INFANT, 'One size'];
 
 function downloadCSVTemplate() {
   const rows = [
     CSV_TEMPLATE_HEADERS,
-    ['T-shirt','Bella+Canvas','3001C','White','S','24','5.10','2025-03-01'],
-    ['T-shirt','Bella+Canvas','3001C','White','M','36','5.10','2025-03-01'],
-    ['T-shirt','Gildan','G5000','Black','L','24','3.25','2025-03-15'],
-    ['Hoodie','Gildan','18500','Navy','XL','12','9.00','2025-04-01'],
-    ['Tote bag','','','Natural','One size','24','',''],
+    ['T-shirt','Bella+Canvas','3001C','White','S','24','5.10','2025-03-01','S&S Activewear','INV-1234'],
+    ['T-shirt','Bella+Canvas','3001C','White','M','36','5.10','2025-03-01','S&S Activewear','INV-1234'],
+    ['T-shirt','Gildan','G5000','Black','L','24','3.25','2025-03-15','Alphabroder','PO-9922'],
+    ['Hoodie','Gildan','18500','Navy','XL','12','9.00','2025-04-01','S&S Activewear','INV-1301'],
+    ['Tote bag','','','Natural','One size','24','','','',''],
   ];
   const esc = v => '"' + String(v).replace(/"/g, '""') + '"';
   const csv = rows.map(r => r.map(esc).join(',')).join('\n');
@@ -2000,6 +2138,9 @@ function handleCSVFile(event) {
           parsedDate = d;
         }
 
+        const supplier      = (row.supplier       || '').trim();
+        const supplierOrder = (row.supplier_order || '').trim();
+
         if(!type)  { errors.push(`Row ${lineNum}: missing type`); return; }
         if(!brand) { errors.push(`Row ${lineNum}: missing brand`); return; }
         if(!color) { errors.push(`Row ${lineNum}: missing color`); return; }
@@ -2008,7 +2149,7 @@ function handleCSVFile(event) {
         if(!CSV_VALID_SIZES.includes(size)) { errors.push(`Row ${lineNum}: invalid size "${size}" — must be one of ${CSV_VALID_SIZES.join(', ')}`); return; }
         if(cost !== null && isNaN(cost)) { errors.push(`Row ${lineNum}: invalid cost "${costRaw}"`); return; }
 
-        valid.push({ type, brand, style, color, size, qty, cost: cost !== null ? Math.round(cost*100)/100 : null, parsedDate });
+        valid.push({ type, brand, style, color, size, qty, cost: cost !== null ? Math.round(cost*100)/100 : null, parsedDate, supplier, supplierOrder });
       });
 
       renderCSVPreview(valid, errors);
@@ -2075,11 +2216,12 @@ function confirmCSVImport() {
   let added = 0, updated = 0;
 
   valid.forEach(r => {
-    const { type, brand, style, color, size, qty, cost, parsedDate } = r;
+    const { type, brand, style, color, size, qty, cost, parsedDate, supplier, supplierOrder } = r;
     // Add to catalog lists
     if(!customTypes.includes(type))   customTypes.push(type);
     if(!customBrands.includes(brand)) customBrands.push(brand);
     if(!customColors.includes(color)) customColors.push(color);
+    if(supplier && !customSuppliers.includes(supplier)) customSuppliers.push(supplier);
     if(style && brand) {
       if(!brandStyles[brand]) brandStyles[brand] = [];
       if(!brandStyles[brand].includes(style)) brandStyles[brand].push(style);
@@ -2101,6 +2243,7 @@ function confirmCSVImport() {
       date: entryDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
       type, brand, style:style||'', color, size, qty,
       cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null,
+      supplier: supplier||'', supplierOrder: supplierOrder||'',
       source: 'csv'
     });
   });
@@ -2247,6 +2390,40 @@ function renderReports() {
     html += `</tbody></table></div>`;
   } else {
     html += `<p class="rpt-empty" style="padding:1rem 14px">No press orders logged this month.</p>`;
+  }
+  html += `</div></div>`;
+
+  // ── Supplier breakdown ─────────────────────────────────────────
+  const supplierMap = {};
+  added.forEach(e => {
+    const s = e.supplier || '(No supplier)';
+    if(!supplierMap[s]) supplierMap[s] = { units:0, cost:0, hasCost:false, orders:new Set() };
+    supplierMap[s].units += e.qty;
+    if(e.totalCost != null) { supplierMap[s].cost += e.totalCost; supplierMap[s].hasCost = true; }
+    if(e.supplierOrder) supplierMap[s].orders.add(e.supplierOrder);
+  });
+  const supplierRows = Object.entries(supplierMap).sort((a,b)=>b[1].units-a[1].units);
+  const hasSupplierData = added.some(e=>e.supplier);
+
+  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
+    <div class="rpt-collapse-header has-open-body" id="rpt-suppliers-hdr" onclick="toggleRptSection('rpt-suppliers')">
+      <span class="rpt-collapse-header-text">Supplier breakdown — stock purchased this month</span>
+      <span class="rpt-collapse-btn open" id="rpt-suppliers-btn">▼</span>
+    </div>
+    <div class="rpt-collapse-body" id="rpt-suppliers">`;
+  if(!added.length) {
+    html += `<p class="rpt-empty" style="padding:1rem 14px">No stock additions logged this month.</p>`;
+  } else if(!hasSupplierData) {
+    html += `<p class="rpt-empty" style="padding:1rem 14px">No supplier info recorded for this month's stock additions. Add a supplier when logging stock to see this report.</p>`;
+  } else {
+    html += `<div style="overflow:auto"><table><thead><tr><th>Supplier</th><th>Units purchased</th><th>Total cost</th><th>Avg cost/unit</th><th>Orders</th></tr></thead><tbody>`;
+    supplierRows.forEach(([name, d]) => {
+      const avgCost = d.hasCost && d.units > 0 ? '$'+(d.cost/d.units).toFixed(2) : '—';
+      const totalCost = d.hasCost ? '$'+d.cost.toFixed(2) : '—';
+      const orderNums = d.orders.size > 0 ? [...d.orders].join(', ') : '—';
+      html += `<tr><td style="font-weight:500">${name}</td><td>${d.units}</td><td>${totalCost}</td><td>${avgCost}</td><td style="font-size:12px;color:var(--text2)">${orderNums}</td></tr>`;
+    });
+    html += `</tbody></table></div>`;
   }
   html += `</div></div>`;
 
