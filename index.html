@@ -826,6 +826,64 @@ function getItem(t,b,st,c,s) { return inventory.find(i=>i.type===t&&i.brand===b&
 function fmt(n) { return n!=null ? '$'+Number(n).toFixed(2) : '—'; }
 function esc(v) { return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
+// ── LOT HELPERS ────────────────────────────────────────────────────
+// Each inventory item has a `lots` array: [{qty, cost, isoDate}]
+// Total qty = sum of lot qtys. FIFO deduction consumes oldest lots first.
+
+function migrateInventory() {
+  // One-time migration: items without lots get a single lot from their legacy qty/cost
+  inventory.forEach(item => {
+    if(!item.lots) {
+      item.lots = [{ qty: item.qty, cost: item.cost ?? null, isoDate: new Date(0).toISOString() }];
+    }
+    // qty is always derived — keep it as a cached sum for filter/display speed
+    item.qty = item.lots.reduce((s,l)=>s+l.qty, 0);
+  });
+}
+migrateInventory();
+save();
+
+function itemTotalQty(item) {
+  return item.lots.reduce((s,l)=>s+l.qty, 0);
+}
+
+function itemCostRange(item) {
+  const costs = item.lots.filter(l=>l.cost!=null&&l.qty>0).map(l=>l.cost);
+  if(!costs.length) return null; // {min, max, display}
+  const min = Math.min(...costs), max = Math.max(...costs);
+  return { min, max, display: min===max ? fmt(min) : `${fmt(min)}–${fmt(max)}` };
+}
+
+function itemStockValue(item) {
+  return item.lots.reduce((s,l)=>s+(l.cost!=null?l.qty*l.cost:0), 0);
+}
+
+// FIFO deduction: consume oldest lots first, return weighted blank cost
+function deductFIFO(item, qtyNeeded) {
+  // Sort lots oldest first (stable — migration lot gets epoch date)
+  const sorted = [...item.lots].sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
+  let remaining = qtyNeeded, totalCost = 0, hasCost = false;
+  sorted.forEach(lot => {
+    if(remaining <= 0) return;
+    const take = Math.min(lot.qty, remaining);
+    if(lot.cost != null) { totalCost += take * lot.cost; hasCost = true; }
+    remaining -= take;
+  });
+  // Now actually deduct from the real lots array (oldest first)
+  let toDeduce = qtyNeeded;
+  item.lots.sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
+  item.lots.forEach(lot => {
+    if(toDeduce <= 0) return;
+    const take = Math.min(lot.qty, toDeduce);
+    lot.qty -= take;
+    toDeduce -= take;
+  });
+  // Remove empty lots
+  item.lots = item.lots.filter(l=>l.qty>0);
+  item.qty  = itemTotalQty(item);
+  return hasCost ? Math.round(totalCost*100)/100 : null;
+}
+
 function stylesForBrand(brand) {
   // If brandStyles[brand] exists it is the source of truth (user may have deleted/renamed built-ins)
   // Otherwise fall back to merging BRAND_STYLES defaults with inventory
@@ -1400,9 +1458,9 @@ function showTab(t) {
 
 // ── INVENTORY ──────────────────────────────────────────────────────
 function updateStats() {
-  const total = inventory.reduce((s,i)=>s+i.qty, 0);
-  const value = inventory.reduce((s,i)=>s+(i.cost!=null?i.qty*i.cost:0), 0);
-  const low   = inventory.filter(i=>i.qty>0&&i.qty<=lowThreshold).length;
+  const total = inventory.reduce((s,i)=>s+itemTotalQty(i), 0);
+  const value = inventory.reduce((s,i)=>s+itemStockValue(i), 0);
+  const low   = inventory.filter(i=>{ const q=itemTotalQty(i); return q>0&&q<=lowThreshold; }).length;
   document.getElementById('stat-total').textContent = total;
   document.getElementById('stat-skus').textContent  = inventory.length;
   document.getElementById('stat-value').textContent = '$'+value.toFixed(2);
@@ -1436,13 +1494,18 @@ function renderTable() {
   const tbody = document.getElementById('inv-body');
   if(!rows.length) { tbody.innerHTML=`<tr><td colspan="11" class="empty">No inventory yet — add stock to get started</td></tr>`; return; }
   tbody.innerHTML = rows.map(i=>{
-    const badge = i.qty===0?'<span class="badge badge-zero">Out</span>':i.qty<=lowThreshold?'<span class="badge badge-low">Low</span>':'<span class="badge badge-ok">In stock</span>';
-    const sv = i.cost!=null ? '$'+(i.qty*i.cost).toFixed(2) : '—';
+    const qty   = itemTotalQty(i);
+    const range = itemCostRange(i);
+    const sv    = itemStockValue(i);
+    const badge = qty===0?'<span class="badge badge-zero">Out</span>':qty<=lowThreshold?'<span class="badge badge-low">Low</span>':'<span class="badge badge-ok">In stock</span>';
+    const svStr = sv>0 ? '$'+sv.toFixed(2) : '—';
+    const costStr = range ? `<span title="${i.lots.filter(l=>l.qty>0).map(l=>`${l.qty}× ${fmt(l.cost)}`).join(', ')}">${range.display}</span>` : '—';
     const e = v=>esc(v);
     const watchClass = i.watch ? 'btn-watch watching' : 'btn-watch';
     const watchIcon  = i.watch ? '🔔' : '🔕';
     const watchTitle = i.watch ? 'Watching — click to stop' : 'Click to watch for reorder';
-    return `<tr${i.watch&&i.qty<=lowThreshold?' style="background:var(--warn-bg)"':''}>
+    const lotCount   = i.lots.length;
+    return `<tr${i.watch&&qty<=lowThreshold?' style="background:var(--warn-bg)"':''}>
       <td title="${i.type}">${i.type}</td>
       <td title="${i.brand}">${i.brand}</td>
       <td><span class="style-tag">${i.style||'—'}</span></td>
@@ -1450,11 +1513,11 @@ function renderTable() {
       <td style="font-weight:600">${i.size}</td>
       <td><div class="qty-ctrl">
         <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',-1)">−</button>
-        <span class="qty-val">${i.qty}</span>
+        <span class="qty-val">${qty}</span>
         <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',1)">+</button>
       </div></td>
-      <td><input class="cost-input" type="number" min="0" step="0.01" value="${i.cost!=null?i.cost:''}" placeholder="—" onchange="updateCost('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',this.value)"></td>
-      <td style="color:var(--text2)">${sv}</td>
+      <td style="font-size:12px">${costStr}${lotCount>1?` <span style="color:var(--text3);font-size:10px">(${lotCount} lots)</span>`:''}</td>
+      <td style="color:var(--text2)">${svStr}</td>
       <td>${badge}</td>
       <td><button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">${watchIcon}</button></td>
       <td><button class="btn btn-danger btn-sm" onclick="removeItem('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">Remove</button></td>
@@ -1471,17 +1534,16 @@ function toggleWatch(t,b,st,c,s) {
 function renderReorderPanel() {
   const panel = document.getElementById('reorder-panel');
   if(!panel) return;
-  const watched = inventory.filter(i => i.watch && i.qty <= lowThreshold);
+  const watched = inventory.filter(i => i.watch && itemTotalQty(i) <= lowThreshold);
   if(!watched.length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
-
   const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
-  watched.sort((a,b) => a.qty - b.qty || a.brand.localeCompare(b.brand));
-
+  watched.sort((a,b) => itemTotalQty(a) - itemTotalQty(b) || a.brand.localeCompare(b.brand));
   let html = `<div class="reorder-panel">
     <h3>🔔 Reorder needed — ${watched.length} SKU${watched.length>1?'s':''} low or out</h3>`;
   watched.forEach(i => {
-    const statusText = i.qty === 0 ? 'OUT OF STOCK' : `${i.qty} left`;
-    const statusColor = i.qty === 0 ? 'var(--danger-text)' : 'var(--warn-text)';
+    const qty = itemTotalQty(i);
+    const statusText = qty === 0 ? 'OUT OF STOCK' : `${qty} left`;
+    const statusColor = qty === 0 ? 'var(--danger-text)' : 'var(--warn-text)';
     html += `<div class="reorder-item">
       <div class="reorder-item-name">${i.brand}${i.style?' <span class="style-tag">'+i.style+'</span>':''} ${i.color} ${i.size} <span style="color:var(--text2);font-weight:400;font-size:12px">(${i.type})</span></div>
       <div class="reorder-item-qty" style="color:${statusColor}">${statusText}</div>
@@ -1492,20 +1554,26 @@ function renderReorderPanel() {
   panel.style.display = 'block';
 }
 
-function updateCost(t,b,st,c,s,val) {
-  const item=getItem(t,b,st,c,s); if(!item) return;
-  const v=parseFloat(val); item.cost=isNaN(v)||val===''?null:Math.round(v*100)/100;
-  save(); updateStats(); renderTable();
-}
 function adjustQty(t,b,st,c,s,delta) {
   const item=getItem(t,b,st,c,s); if(!item) return;
-  item.qty=Math.max(0,item.qty+delta); save(); renderTable(); updateStats();
-  // renderTable already calls renderReorderPanel
+  if(delta > 0) {
+    // Add to the most recent lot if it exists, else create one
+    if(item.lots.length) item.lots[item.lots.length-1].qty += delta;
+    else item.lots.push({qty:delta, cost:null, isoDate:new Date().toISOString()});
+  } else {
+    // Deduct FIFO
+    const available = itemTotalQty(item);
+    if(available === 0) return;
+    deductFIFO(item, 1);
+  }
+  item.qty = itemTotalQty(item);
+  save(); renderTable(); updateStats();
 }
 function removeItem(t,b,st,c,s) {
   const item = inventory.find(i=>i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s);
   if(!item) return;
-  const label = `${item.brand}${item.style?' '+item.style:''} ${item.color} ${item.size} (${item.type}) — ${item.qty} in stock`;
+  const qty = itemTotalQty(item);
+  const label = `${item.brand}${item.style?' '+item.style:''} ${item.color} ${item.size} (${item.type}) — ${qty} in stock`;
   if(!confirm(`Remove this item?\n\n${label}\n\nThis cannot be undone.`)) return;
   inventory=inventory.filter(i=>!(i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s));
   save(); renderTable(); updateStats(); updateFilters();
@@ -1666,15 +1734,19 @@ function addBulkStock() {
   if(supplier && !customSuppliers.includes(supplier)) { customSuppliers.push(supplier); saveOptions(); }
 
   let added = 0;
+  const now = new Date();
   entries.forEach(({size, qty, cost}) => {
     const existing = getItem(type, brand, style||'', color, size);
-    if(existing) { existing.qty += qty; if(cost !== null) existing.cost = cost; }
-    else { inventory.push({type, brand, style:style||'', color, size, qty, cost}); }
+    const lot = { qty, cost, isoDate: now.toISOString() };
+    if(existing) {
+      existing.lots.push(lot);
+      existing.qty = itemTotalQty(existing);
+    } else {
+      inventory.push({type, brand, style:style||'', color, size, qty, lots:[lot]});
+    }
     added++;
   });
-
   save(); updateFilters();
-  const now = new Date();
   entries.forEach(({size, qty, cost}) => {
     stockLog.unshift({
       id: Date.now() + Math.random(),
@@ -1722,8 +1794,9 @@ function addStock() {
   }
   if(supplier && !customSuppliers.includes(supplier)) { customSuppliers.push(supplier); saveOptions(); }
   const existing=getItem(type,brand,style||'',color,size);
-  if(existing) { existing.qty+=qty; if(cost!==null) existing.cost=cost; }
-  else { inventory.push({type,brand,style:style||'',color,size,qty,cost}); }
+  const lot = { qty, cost, isoDate: new Date().toISOString() };
+  if(existing) { existing.lots.push(lot); existing.qty = itemTotalQty(existing); }
+  else { inventory.push({type,brand,style:style||'',color,size,qty,lots:[lot]}); }
   save(); updateFilters();
   stockLog.unshift({
     id: Date.now(),
@@ -1819,7 +1892,20 @@ function showPressCost() {
   const item=getItem(type,brand,style,color,size);
   if(!item) { preview.style.display='none'; return; }
   preview.style.display='block';
-  document.getElementById('press-cost-val').textContent=item.cost!=null?`${fmt(item.cost)} × ${qty} = ${fmt(item.cost*qty)}`:'No cost set for this blank';
+
+  // Simulate FIFO cost without mutating
+  const sorted = [...item.lots].sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
+  let remaining=qty, totalCost=0, hasCost=false;
+  sorted.forEach(lot => {
+    if(remaining<=0) return;
+    const take=Math.min(lot.qty, remaining);
+    if(lot.cost!=null){totalCost+=take*lot.cost; hasCost=true;}
+    remaining-=take;
+  });
+  const costText = hasCost
+    ? `${fmt(Math.round(totalCost*100)/100)} (FIFO across ${item.lots.length} lot${item.lots.length>1?'s':''})`
+    : 'No cost set for this blank';
+  document.getElementById('press-cost-val').textContent = costText;
 }
 // ── PRESS ORDER CART ───────────────────────────────────────────────
 let pressCart = []; // [{type,brand,style,color,size,qty,blankCost,invItem}]
@@ -1882,17 +1968,26 @@ function addPressLine() {
     setTimeout(()=>el.innerHTML='', 3000); return;
   }
 
-  // Check we have enough stock accounting for lines already in cart
+  // Check available stock accounting for lines already in cart
   const alreadyInCart = pressCart
     .filter(l=>l.type===type&&l.brand===brand&&l.style===style&&l.color===color&&l.size===size)
     .reduce((s,l)=>s+l.qty, 0);
-  const available = item.qty - alreadyInCart;
+  const available = itemTotalQty(item) - alreadyInCart;
   if(qty > available) {
-    el.innerHTML=`<div class="alert alert-error">Only ${available} available (${item.qty} in stock, ${alreadyInCart} already in this order).</div>`;
+    el.innerHTML=`<div class="alert alert-error">Only ${available} available (${itemTotalQty(item)} in stock, ${alreadyInCart} already in this order).</div>`;
     setTimeout(()=>el.innerHTML='', 4000); return;
   }
 
-  const blankCost = item.cost!=null ? Math.round(item.cost*qty*100)/100 : null;
+  // Simulate FIFO cost without mutating (real deduction happens on submit)
+  // Offset already-committed cart qty from oldest lots first
+  const lotsClone = item.lots
+    .map(l=>({...l}))
+    .sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
+  let cartOffset = alreadyInCart;
+  lotsClone.forEach(l=>{ if(cartOffset<=0) return; const take=Math.min(l.qty,cartOffset); l.qty-=take; cartOffset-=take; });
+  let remaining=qty, totalCost=0, hasCost=false;
+  lotsClone.forEach(lot=>{ if(remaining<=0||lot.qty<=0) return; const take=Math.min(lot.qty,remaining); if(lot.cost!=null){totalCost+=take*lot.cost;hasCost=true;} remaining-=take; });
+  const blankCost = hasCost ? Math.round(totalCost*100)/100 : null;
   pressCart.push({type,brand,style:style||'',color,size,qty,blankCost,itemKey:`${type}|${brand}|${style}|${color}|${size}`});
   renderPressCart();
 
@@ -1931,14 +2026,14 @@ function submitPressOrder() {
   pressCart.forEach((line, idx) => {
     const item = getItem(line.type,line.brand,line.style,line.color,line.size);
     if(!item) return;
-    item.qty -= line.qty;
+    const fifoBlankCost = deductFIFO(item, line.qty);
     orderLog.unshift({
       id: orderId + idx,
       isoDate, date: dateStr,
       shop: shop||'', orderNum, note,
       type:line.type, brand:line.brand, style:line.style,
       color:line.color, size:line.size, qty:line.qty,
-      blankCost:line.blankCost
+      blankCost: fifoBlankCost
     });
   });
 
@@ -2329,12 +2424,13 @@ function confirmCSVImport() {
       if(!brandStyles[brand].includes(style)) brandStyles[brand].push(style);
     }
     const existing = getItem(type, brand, style, color, size);
+    const lot = { qty, cost, isoDate: (r.parsedDate || new Date()).toISOString() };
     if(existing) {
-      existing.qty += qty;
-      if(cost !== null) existing.cost = cost;
+      existing.lots.push(lot);
+      existing.qty = itemTotalQty(existing);
       updated++;
     } else {
-      inventory.push({type, brand, style:style||'', color, size, qty, cost});
+      inventory.push({type, brand, style:style||'', color, size, qty, lots:[lot]});
       added++;
     }
     // Log the stock addition — use provided date or fall back to today
