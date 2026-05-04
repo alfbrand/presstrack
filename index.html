@@ -558,7 +558,6 @@
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn btn-sm" onclick="toggleLogSort()" id="log-sort-btn" title="Toggle date sort">Date ▼</button>
-          <button class="btn btn-danger btn-sm" onclick="clearLog()">Clear log</button>
         </div>
       </div>
       <div id="log-stats" style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap"></div>
@@ -767,6 +766,11 @@
       <input type="file" id="import-file" accept=".json" style="display:none" onchange="importData(event)">
     </div>
     <p style="font-size:12px;color:var(--text2);margin-top:8px">Export saves all inventory and orders as a JSON file you can re-import any time.</p>
+    <div style="margin-top:12px;padding:10px 12px;background:var(--danger-bg);border-radius:var(--radius);border:0.5px solid var(--danger-text)">
+      <p style="font-size:12px;font-weight:600;color:var(--danger-text);margin-bottom:6px">Danger zone</p>
+      <button class="btn btn-danger btn-sm" onclick="clearLog()">Clear entire order log</button>
+      <p style="font-size:11px;color:var(--danger-text);margin-top:6px;opacity:0.8">Permanently deletes all press order history. Export a backup first.</p>
+    </div>
     <hr class="divider">
 
     <!-- BACKFILL -->
@@ -826,22 +830,53 @@ function getItem(t,b,st,c,s) { return inventory.find(i=>i.type===t&&i.brand===b&
 function fmt(n) { return n!=null ? '$'+Number(n).toFixed(2) : '—'; }
 function esc(v) { return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
+// ── NORMALIZATION ──────────────────────────────────────────────────
+// Types, Brands, and Styles are title-cased to prevent case duplicates.
+// Colors, shops, suppliers are left as-is (e.g. "Heather Navy" is intentional).
+function toTitleCase(str) {
+  return str.trim().replace(/\w\S*/g, w => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase());
+}
+function normalizeType(v)  { return toTitleCase(v); }
+function normalizeBrand(v) { return toTitleCase(v); }
+function normalizeStyle(v) { return v.trim(); } // styles like "3001C" must preserve case exactly
+
 // ── LOT HELPERS ────────────────────────────────────────────────────
 // Each inventory item has a `lots` array: [{qty, cost, isoDate}]
 // Total qty = sum of lot qtys. FIFO deduction consumes oldest lots first.
 
 function migrateInventory() {
-  // One-time migration: items without lots get a single lot from their legacy qty/cost
+  // Normalize existing types, brands, styles to title case
+  inventory.forEach(item => {
+    if(item.type)  item.type  = normalizeType(item.type);
+    if(item.brand) item.brand = normalizeBrand(item.brand);
+    if(item.style) item.style = normalizeStyle(item.style);
+  });
+  orderLog.forEach(o => {
+    if(o.type)  o.type  = normalizeType(o.type);
+    if(o.brand) o.brand = normalizeBrand(o.brand);
+    if(o.style) o.style = normalizeStyle(o.style);
+  });
+  stockLog.forEach(e => {
+    if(e.type)  e.type  = normalizeType(e.type);
+    if(e.brand) e.brand = normalizeBrand(e.brand);
+    if(e.style) e.style = normalizeStyle(e.style);
+  });
+  customTypes  = customTypes.map(normalizeType);
+  customBrands = customBrands.map(normalizeBrand);
+  // Remove any duplicates created by normalization
+  customTypes  = [...new Set(customTypes)];
+  customBrands = [...new Set(customBrands)];
+
+  // One-time lot migration: items without lots get a single lot from their legacy qty/cost
   inventory.forEach(item => {
     if(!item.lots) {
       item.lots = [{ qty: item.qty, cost: item.cost ?? null, isoDate: new Date(0).toISOString() }];
     }
-    // qty is always derived — keep it as a cached sum for filter/display speed
     item.qty = item.lots.reduce((s,l)=>s+l.qty, 0);
   });
 }
 migrateInventory();
-save();
+save(); saveLog(); saveStockLog(); saveOptions();
 
 function itemTotalQty(item) {
   return item.lots.reduce((s,l)=>s+l.qty, 0);
@@ -1122,6 +1157,7 @@ function confirmDelete(type, name, brand) {
 
 // ── RENAME FUNCTIONS ───────────────────────────────────────────────
 function renameBrand(oldVal, newVal) {
+  newVal = normalizeBrand(newVal);
   if(!newVal || newVal===oldVal) return;
   customBrands = customBrands.map(v=>v===oldVal?newVal:v);
   if(brandStyles[oldVal]) { brandStyles[newVal]=brandStyles[oldVal]; delete brandStyles[oldVal]; }
@@ -1130,12 +1166,10 @@ function renameBrand(oldVal, newVal) {
   saveOptions(); save(); saveLog();
 }
 function renameStyle(brand, oldVal, newVal) {
+  newVal = normalizeStyle(newVal);
   if(!newVal || newVal===oldVal) return;
-  // Seed brandStyles from defaults if not yet customised, so built-in styles are editable
   if(!brandStyles[brand]) brandStyles[brand] = [...(BRAND_STYLES[brand] || [])];
-  else {
-    (BRAND_STYLES[brand] || []).forEach(s => { if(!brandStyles[brand].includes(s)) brandStyles[brand].push(s); });
-  }
+  else { (BRAND_STYLES[brand] || []).forEach(s => { if(!brandStyles[brand].includes(s)) brandStyles[brand].push(s); }); }
   brandStyles[brand] = brandStyles[brand].map(s => s===oldVal ? newVal : s);
   inventory.forEach(i=>{ if(i.brand===brand&&i.style===oldVal) i.style=newVal; });
   orderLog.forEach(o=>{ if(o.brand===brand&&o.style===oldVal) o.style=newVal; });
@@ -1149,6 +1183,7 @@ function renameColor(oldVal, newVal) {
   saveOptions(); save(); saveLog();
 }
 function renameType(oldVal, newVal) {
+  newVal = normalizeType(newVal);
   if(!newVal || newVal===oldVal) return;
   customTypes = customTypes.map(v=>v===oldVal?newVal:v);
   inventory.forEach(i=>{ if(i.type===oldVal) i.type=newVal; });
@@ -1184,13 +1219,13 @@ function deleteSupplier(val) { customSuppliers=customSuppliers.filter(v=>v!==val
 // ── ADD FROM CATALOG PANEL ─────────────────────────────────────────
 function catAdd(field) {
   if(field==='brand') {
-    const val=document.getElementById('cat-brand-new').value.trim(); if(!val) return;
+    let val=normalizeBrand(document.getElementById('cat-brand-new').value); if(!val) return;
     if(!customBrands.includes(val)) customBrands.push(val);
     saveOptions(); document.getElementById('cat-brand-new').value='';
     renderCatBrands(); populateCatStyleBrandDropdowns();
   } else if(field==='style') {
     const brand=document.getElementById('cat-style-brand-for-new').value;
-    const val=document.getElementById('cat-style-new').value.trim();
+    let val=normalizeStyle(document.getElementById('cat-style-new').value);
     if(!brand||!val) { alert('Select a brand and enter a style/SKU.'); return; }
     if(!brandStyles[brand]) brandStyles[brand]=[];
     if(!brandStyles[brand].includes(val)) brandStyles[brand].push(val);
@@ -1202,7 +1237,7 @@ function catAdd(field) {
     saveOptions(); document.getElementById('cat-color-new').value='';
     renderCatColors();
   } else if(field==='type') {
-    const val=document.getElementById('cat-type-new').value.trim(); if(!val) return;
+    let val=normalizeType(document.getElementById('cat-type-new').value); if(!val) return;
     if(!customTypes.includes(val)) customTypes.push(val);
     saveOptions(); document.getElementById('cat-type-new').value='';
     renderCatTypes();
@@ -1377,7 +1412,11 @@ function confirmNew(field) {
   const map  = { type:'add-type', brand:'add-brand', style:'add-style', color:'add-color', shop:'press-shop', supplier:'add-supplier' };
   const labs = { type:'type', brand:'brand', style:'style / SKU', color:'color', shop:'shop', supplier:'supplier' };
   const input = document.getElementById(`new-${field}-input`);
-  const val = input.value.trim(); if(!val) return;
+  let val = input.value.trim(); if(!val) return;
+  // Normalize case for types, brands, styles
+  if(field==='type')  val = normalizeType(val);
+  if(field==='brand') val = normalizeBrand(val);
+  if(field==='style') val = normalizeStyle(val);
   if(field==='type'     && !customTypes.includes(val))     customTypes.push(val);
   if(field==='brand'    && !customBrands.includes(val))    customBrands.push(val);
   if(field==='color'    && !customColors.includes(val))    customColors.push(val);
@@ -1707,9 +1746,9 @@ function bulkFillAllCosts() {
 }
 
 function addBulkStock() {
-  const type  = document.getElementById('add-type').value;
-  const brand = document.getElementById('add-brand').value;
-  const style = document.getElementById('add-style').value;
+  const type  = normalizeType(document.getElementById('add-type').value);
+  const brand = normalizeBrand(document.getElementById('add-brand').value);
+  const style = normalizeStyle(document.getElementById('add-style').value);
   const color = document.getElementById('add-color').value;
   const supplier = document.getElementById('add-supplier').value||'';
   const supplierOrder = document.getElementById('add-supplier-order').value.trim();
@@ -1775,9 +1814,9 @@ function addBulkStock() {
 }
 
 function addStock() {
-  const type=document.getElementById('add-type').value;
-  const brand=document.getElementById('add-brand').value;
-  const style=document.getElementById('add-style').value;
+  const type=normalizeType(document.getElementById('add-type').value);
+  const brand=normalizeBrand(document.getElementById('add-brand').value);
+  const style=normalizeStyle(document.getElementById('add-style').value);
   const color=document.getElementById('add-color').value;
   const size=document.getElementById('add-size').value;
   const qty=parseInt(document.getElementById('add-qty').value)||0;
@@ -2413,7 +2452,10 @@ function confirmCSVImport() {
   let added = 0, updated = 0;
 
   valid.forEach(r => {
-    const { type, brand, style, color, size, qty, cost, parsedDate, supplier, supplierOrder } = r;
+    const { color, size, qty, cost, parsedDate, supplier, supplierOrder } = r;
+    const type  = normalizeType(r.type);
+    const brand = normalizeBrand(r.brand);
+    const style = normalizeStyle(r.style);
     // Add to catalog lists
     if(!customTypes.includes(type))   customTypes.push(type);
     if(!customBrands.includes(brand)) customBrands.push(brand);
