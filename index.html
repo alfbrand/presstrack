@@ -810,7 +810,8 @@ const BRAND_STYLES   = {
 let customTypes  = JSON.parse(localStorage.getItem('pt_types')   || 'null') || [...DEFAULT_TYPES];
 let customBrands = JSON.parse(localStorage.getItem('pt_brands')  || 'null') || [...DEFAULT_BRANDS];
 let customColors = JSON.parse(localStorage.getItem('pt_colors')  || 'null') || [...DEFAULT_COLORS];
-let customShops     = JSON.parse(localStorage.getItem('pt_shops')     || 'null') || [];
+let customShops     = JSON.parse(localStorage.getItem('pt_shops')      || 'null') || [];
+let shopColors      = JSON.parse(localStorage.getItem('pt_shopcolors') || '{}');
 let customSuppliers = JSON.parse(localStorage.getItem('pt_suppliers') || 'null') || [];
 let brandStyles     = JSON.parse(localStorage.getItem('pt_bstyles')   || 'null') || {};
 
@@ -818,7 +819,8 @@ function saveOptions() {
   localStorage.setItem('pt_types',     JSON.stringify(customTypes));
   localStorage.setItem('pt_brands',    JSON.stringify(customBrands));
   localStorage.setItem('pt_colors',    JSON.stringify(customColors));
-  localStorage.setItem('pt_shops',     JSON.stringify(customShops));
+  localStorage.setItem('pt_shops',      JSON.stringify(customShops));
+  localStorage.setItem('pt_shopcolors', JSON.stringify(shopColors));
   localStorage.setItem('pt_suppliers', JSON.stringify(customSuppliers));
   localStorage.setItem('pt_bstyles',   JSON.stringify(brandStyles));
 }
@@ -828,6 +830,29 @@ function saveStockLog() { try { localStorage.setItem('pt_slog', JSON.stringify(s
 
 function getItem(t,b,st,c,s) { return inventory.find(i=>i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s); }
 function fmt(n) { return n!=null ? '$'+Number(n).toFixed(2) : '—'; }
+
+// Curated shop pill color palette
+const SHOP_PILL_PALETTES = [
+  { label:'Blue',    bg:'#dbeafe', text:'#1e40af' },
+  { label:'Green',   bg:'#dcfce7', text:'#166534' },
+  { label:'Purple',  bg:'#ede9fe', text:'#5b21b6' },
+  { label:'Pink',    bg:'#fce7f3', text:'#9d174d' },
+  { label:'Orange',  bg:'#ffedd5', text:'#9a3412' },
+  { label:'Teal',    bg:'#ccfbf1', text:'#115e59' },
+  { label:'Red',     bg:'#fee2e2', text:'#991b1b' },
+  { label:'Yellow',  bg:'#fef9c3', text:'#854d0e' },
+  { label:'Indigo',  bg:'#e0e7ff', text:'#3730a3' },
+  { label:'Slate',   bg:'#f1f5f9', text:'#334155' },
+];
+
+function shopPillStyle(shop) {
+  const c = shopColors[shop];
+  if(!c) return '';
+  return ` style="background:${c.bg};color:${c.text}"`;
+}
+function shopPillHTML(shop) {
+  return `<span class="shop-pill"${shopPillStyle(shop)}>${shop}</span>`;
+}
 function esc(v) { return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
 // ── NORMALIZATION ──────────────────────────────────────────────────
@@ -1121,10 +1146,79 @@ function renderCatShops() {
   const shops = [...customShops].sort();
   if(!shops.length) { list.innerHTML='<div class="cat-empty">No shops yet</div>'; return; }
   shops.forEach(shop => {
-    const item = makeCatItem(shop,
-      newName => { renameShop(shop, newName); renderCatShops(); },
-      ()      => { if(!confirmDelete('shop', shop)) return; deleteShop(shop); renderCatShops(); }
-    );
+    const item = document.createElement('div');
+    item.className = 'cat-item';
+    item.style.flexWrap = 'wrap';
+    item.style.gap = '8px';
+
+    // Name + rename/delete (reuse makeCatItem logic inline)
+    const nameWrap = document.createElement('div');
+    nameWrap.style.cssText = 'display:flex;align-items:center;gap:6px;flex:1;min-width:180px';
+
+    const span = document.createElement('span');
+    span.className = 'cat-item-label';
+    span.textContent = shop;
+
+    const input = document.createElement('input');
+    input.type = 'text'; input.value = shop;
+    input.style.cssText = 'display:none;font-size:13px;padding:4px 7px;flex:1';
+
+    const renameBtn = document.createElement('button');
+    renameBtn.className = 'btn btn-sm'; renameBtn.textContent = 'Rename';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.className = 'btn btn-sm'; saveBtn.textContent = 'Save';
+    saveBtn.style.display = 'none';
+
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'btn btn-danger btn-sm'; deleteBtn.textContent = 'Delete';
+
+    renameBtn.onclick = () => { span.style.display='none'; input.style.display=''; input.focus(); renameBtn.style.display='none'; saveBtn.style.display=''; };
+    input.onkeydown = e => { if(e.key==='Enter') saveBtn.click(); };
+    saveBtn.onclick = () => { const nv=input.value.trim(); if(!nv) return; renameShop(shop, nv); renderCatShops(); };
+    deleteBtn.onclick = () => { if(!confirmDelete('shop', shop)) return; deleteShop(shop); renderCatShops(); };
+
+    nameWrap.appendChild(span); nameWrap.appendChild(renameBtn);
+    nameWrap.appendChild(input); nameWrap.appendChild(saveBtn);
+    nameWrap.appendChild(deleteBtn);
+
+    // Color swatches
+    const swatchWrap = document.createElement('div');
+    swatchWrap.style.cssText = 'display:flex;align-items:center;gap:5px;flex-wrap:wrap';
+
+    const swatchLabel = document.createElement('span');
+    swatchLabel.style.cssText = 'font-size:11px;color:var(--text3);margin-right:2px';
+    swatchLabel.textContent = 'Color:';
+    swatchWrap.appendChild(swatchLabel);
+
+    // "Default" swatch (no color)
+    const defSwatch = document.createElement('button');
+    defSwatch.title = 'Default';
+    const isDefault = !shopColors[shop];
+    defSwatch.style.cssText = `width:20px;height:20px;border-radius:50%;border:2px solid ${isDefault?'var(--text)':'var(--border2)'};background:var(--info-bg);cursor:pointer;flex-shrink:0;font-size:9px;line-height:1`;
+    defSwatch.textContent = isDefault ? '✓' : '';
+    defSwatch.onclick = () => { delete shopColors[shop]; saveOptions(); renderCatShops(); renderLog(); };
+    swatchWrap.appendChild(defSwatch);
+
+    SHOP_PILL_PALETTES.forEach(palette => {
+      const swatch = document.createElement('button');
+      const active = shopColors[shop]?.bg === palette.bg;
+      swatch.title = palette.label;
+      swatch.style.cssText = `width:20px;height:20px;border-radius:50%;border:2px solid ${active?palette.text:'transparent'};background:${palette.bg};cursor:pointer;flex-shrink:0;font-size:9px;color:${palette.text};line-height:1`;
+      swatch.textContent = active ? '✓' : '';
+      swatch.onclick = () => { shopColors[shop] = { bg: palette.bg, text: palette.text }; saveOptions(); renderCatShops(); renderLog(); };
+      swatchWrap.appendChild(swatch);
+    });
+
+    // Preview pill
+    const preview = document.createElement('span');
+    preview.className = 'shop-pill';
+    preview.textContent = shop;
+    if(shopColors[shop]) { preview.style.background = shopColors[shop].bg; preview.style.color = shopColors[shop].text; }
+    swatchWrap.appendChild(preview);
+
+    item.appendChild(nameWrap);
+    item.appendChild(swatchWrap);
     list.appendChild(item);
   });
 }
@@ -1193,6 +1287,7 @@ function renameType(oldVal, newVal) {
 function renameShop(oldVal, newVal) {
   if(!newVal || newVal===oldVal) return;
   customShops = customShops.map(v=>v===oldVal?newVal:v);
+  if(shopColors[oldVal]) { shopColors[newVal]=shopColors[oldVal]; delete shopColors[oldVal]; }
   orderLog.forEach(o=>{ if(o.shop===oldVal) o.shop=newVal; });
   saveOptions(); saveLog();
 }
@@ -1213,7 +1308,7 @@ function deleteStyle(brand, val) {
 }
 function deleteColor(val)    { customColors=customColors.filter(v=>v!==val);    saveOptions(); }
 function deleteType(val)     { customTypes=customTypes.filter(v=>v!==val);      saveOptions(); }
-function deleteShop(val)     { customShops=customShops.filter(v=>v!==val);      saveOptions(); }
+function deleteShop(val)     { customShops=customShops.filter(v=>v!==val); delete shopColors[val]; saveOptions(); }
 function deleteSupplier(val) { customSuppliers=customSuppliers.filter(v=>v!==val); saveOptions(); }
 
 // ── ADD FROM CATALOG PANEL ─────────────────────────────────────────
@@ -1346,7 +1441,7 @@ function saveBackfill() {
 
 // ── EXPORT / IMPORT ────────────────────────────────────────────────
 function exportData() {
-  const data = { inventory, orderLog, stockLog, customTypes, customBrands, customColors, customShops, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
+  const data = { inventory, orderLog, stockLog, customTypes, customBrands, customColors, customShops, shopColors, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1368,6 +1463,7 @@ function importData(e) {
       customBrands = data.customBrands || [...DEFAULT_BRANDS];
       customColors = data.customColors || [...DEFAULT_COLORS];
       customShops  = data.customShops  || [];
+      shopColors   = data.shopColors   || {};
       customSuppliers = data.customSuppliers || [];
       brandStyles  = data.brandStyles  || {};
       save(); saveLog(); saveStockLog(); saveOptions();
@@ -2164,7 +2260,7 @@ function renderLog() {
     hdr.innerHTML = `
       <div class="order-group-num">#${orderNum}</div>
       <div class="order-group-meta">
-        ${rep.shop ? `<span class="shop-pill">${rep.shop}</span>` : ''}
+        ${rep.shop ? shopPillHTML(rep.shop) : ''}
         <span class="order-group-meta-item"><strong>${rep.date}</strong></span>
         <span class="order-group-meta-item"><strong>${totalQty}</strong> unit${totalQty!==1?'s':''}</span>
         ${groupHasCost ? `<span class="order-group-meta-item"><strong>$${groupCost.toFixed(2)}</strong> blank cost</span>` : ''}
