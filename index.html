@@ -257,6 +257,15 @@
     .inv-brand-toggle { font-size:11px; color:var(--text3); }
     .inv-brand-body { }
 
+    .inv-style-group { border-top:0.5px solid var(--border); }
+    .inv-style-group:first-child { border-top:none; }
+    .inv-style-header { display:flex; align-items:center; gap:10px; padding:6px 14px 6px 28px; background:var(--bg); cursor:pointer; user-select:none; }
+    .inv-style-header:hover { background:var(--bg2); }
+    .inv-style-label { font-size:12px; font-weight:600; flex:1; color:var(--text2); }
+    .inv-style-meta { font-size:11px; color:var(--text3); }
+    .inv-style-toggle { font-size:10px; color:var(--text3); }
+    .inv-style-body { display:none; }
+
     /* ORDER LOG GROUPS */
     .order-group { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 10px; overflow: hidden; }
     .order-group-header { display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: var(--bg2); flex-wrap: wrap; cursor: pointer; user-select: none; }
@@ -1737,6 +1746,15 @@ function renderTable() {
       const brandVal  = items.reduce((s,i)=>s+itemStockValue(i), 0);
       const isBrandOpen = openBrands.has(brandKey);
 
+      // Group items by style within brand
+      const styleGroups = {};
+      items.forEach(i => {
+        const sk = i.style || '(No style)';
+        if(!styleGroups[sk]) styleGroups[sk] = [];
+        styleGroups[sk].push(i);
+      });
+      const styleCount = Object.keys(styleGroups).length;
+
       const brandGroup = document.createElement('div');
       brandGroup.className = 'inv-brand-group';
 
@@ -1747,7 +1765,7 @@ function renderTable() {
         <span class="inv-brand-label">${brand}</span>
         <span class="inv-brand-meta">${brandQty} unit${brandQty!==1?'s':''}</span>
         ${brandVal>0 ? `<span class="inv-brand-meta">· $${brandVal.toFixed(2)}</span>` : ''}
-        <span class="inv-brand-meta">${items.length} SKU${items.length!==1?'s':''}</span>`;
+        <span class="inv-brand-meta">${styleCount} style${styleCount!==1?'s':''} · ${items.length} SKU${items.length!==1?'s':''}</span>`;
 
       const brandBody = document.createElement('div');
       brandBody.className = 'inv-brand-body';
@@ -1767,56 +1785,97 @@ function renderTable() {
         container._openBrands = [...openBrands];
       });
 
-      // Items table
-      const tblWrap = document.createElement('div');
-      tblWrap.className = 'tbl-wrap';
-      tblWrap.style.borderRadius = '0';
-      tblWrap.style.border = 'none';
-      tblWrap.style.borderTop = '0.5px solid var(--border)';
+      // Style subgroups within brand
+      const openStyles = new Set(container._openStyles || []);
+      Object.keys(styleGroups).sort().forEach(style => {
+        const styleItems  = styleGroups[style];
+        const styleKey    = `${type}::${brand}::${style}`;
+        const styleQty    = styleItems.reduce((s,i)=>s+itemTotalQty(i), 0);
+        const styleVal    = styleItems.reduce((s,i)=>s+itemStockValue(i), 0);
+        const isStyleOpen = openStyles.has(styleKey);
 
-      const tbl = document.createElement('table');
-      tbl.innerHTML = `<thead><tr>
-        <th>Style</th><th>Color</th><th>Size</th><th>Qty</th>
-        <th>Cost/unit</th><th>Stock value</th><th>Status</th>
-        <th title="Watch for reorder">🔔</th><th></th>
-      </tr></thead>`;
+        const styleGroup = document.createElement('div');
+        styleGroup.className = 'inv-style-group';
 
-      const tbody = document.createElement('tbody');
-      items.forEach(i => {
-        const qty   = itemTotalQty(i);
-        const range = itemCostRange(i);
-        const sv    = itemStockValue(i);
-        const badge = qty===0 ? '<span class="badge badge-zero">Out</span>'
-                    : qty<=lowThreshold ? '<span class="badge badge-low">Low</span>'
-                    : '<span class="badge badge-ok">In stock</span>';
-        const svStr   = sv>0 ? '$'+sv.toFixed(2) : '—';
-        const costStr = range
-          ? `<span title="${i.lots.filter(l=>l.qty>0).map(l=>`${l.qty}× ${fmt(l.cost)}`).join(', ')}">${range.display}</span>`
-          : '—';
-        const lotLabel = i.lots.length>1 ? ` <span style="color:var(--text3);font-size:10px">(${i.lots.length} lots)</span>` : '';
-        const e = v => esc(v);
-        const watchClass = i.watch ? 'btn-watch watching' : 'btn-watch';
-        const watchIcon  = i.watch ? '🔔' : '🔕';
-        const watchTitle = i.watch ? 'Watching — click to stop' : 'Click to watch for reorder';
+        const styleHdr = document.createElement('div');
+        styleHdr.className = 'inv-style-header';
+        styleHdr.dataset.styleKey = styleKey;
+        styleHdr.innerHTML = `
+          <span class="inv-style-toggle">${isStyleOpen ? '▼' : '▶'}</span>
+          <span class="inv-style-label"><span class="style-tag">${style === '(No style)' ? '—' : style}</span></span>
+          <span class="inv-style-meta">${styleQty} unit${styleQty!==1?'s':''}</span>
+          ${styleVal>0 ? `<span class="inv-style-meta">· $${styleVal.toFixed(2)}</span>` : ''}
+          <span class="inv-style-meta">${styleItems.length} color/size${styleItems.length!==1?'s':''}</span>`;
 
-        const tr = document.createElement('tr');
-        if(i.watch && qty<=lowThreshold) tr.style.background = 'var(--warn-bg)';
-        tr.innerHTML = `
-          <td><span class="style-tag">${i.style||'—'}</span></td>
-          <td title="${i.color}">${i.color}</td>
-          <td style="font-weight:600">${i.size}</td>
-          <td style="font-weight:600;text-align:center">${qty}</td>
-          <td style="font-size:12px">${costStr}${lotLabel}</td>
-          <td style="color:var(--text2)">${svStr}</td>
-          <td>${badge}</td>
-          <td><button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">${watchIcon}</button></td>
-          <td><button class="btn btn-danger btn-sm" onclick="removeItem('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">Remove</button></td>`;
-        tbody.appendChild(tr);
+        const styleBody = document.createElement('div');
+        styleBody.className = 'inv-style-body';
+        styleBody.dataset.styleKey = styleKey;
+        styleBody.style.display = isStyleOpen ? '' : 'none';
+
+        styleHdr.addEventListener('click', e => {
+          e.stopPropagation();
+          const key  = styleHdr.dataset.styleKey;
+          const body = container.querySelector(`.inv-style-body[data-style-key="${CSS.escape(key)}"]`);
+          if(!body) return;
+          const nowOpen = body.style.display === 'none';
+          body.style.display = nowOpen ? '' : 'none';
+          styleHdr.querySelector('.inv-style-toggle').textContent = nowOpen ? '▼' : '▶';
+          if(nowOpen) openStyles.add(key); else openStyles.delete(key);
+          container._openStyles = [...openStyles];
+        });
+
+        // Items table inside style group
+        const tblWrap = document.createElement('div');
+        tblWrap.className = 'tbl-wrap';
+        tblWrap.style.cssText = 'border-radius:0;border:none;border-top:0.5px solid var(--border)';
+
+        const tbl = document.createElement('table');
+        tbl.innerHTML = `<thead><tr>
+          <th>Color</th><th>Size</th><th>Qty</th>
+          <th>Cost/unit</th><th>Stock value</th><th>Status</th>
+          <th title="Watch for reorder">🔔</th><th></th>
+        </tr></thead>`;
+
+        const tbody = document.createElement('tbody');
+        styleItems.forEach(i => {
+          const qty   = itemTotalQty(i);
+          const range = itemCostRange(i);
+          const sv    = itemStockValue(i);
+          const badge = qty===0 ? '<span class="badge badge-zero">Out</span>'
+                      : qty<=lowThreshold ? '<span class="badge badge-low">Low</span>'
+                      : '<span class="badge badge-ok">In stock</span>';
+          const svStr   = sv>0 ? '$'+sv.toFixed(2) : '—';
+          const costStr = range
+            ? `<span title="${i.lots.filter(l=>l.qty>0).map(l=>`${l.qty}× ${fmt(l.cost)}`).join(', ')}">${range.display}</span>`
+            : '—';
+          const lotLabel = i.lots.length>1 ? ` <span style="color:var(--text3);font-size:10px">(${i.lots.length} lots)</span>` : '';
+          const ev = v => esc(v);
+          const watchClass = i.watch ? 'btn-watch watching' : 'btn-watch';
+          const watchIcon  = i.watch ? '🔔' : '🔕';
+          const watchTitle = i.watch ? 'Watching — click to stop' : 'Click to watch for reorder';
+
+          const tr = document.createElement('tr');
+          if(i.watch && qty<=lowThreshold) tr.style.background = 'var(--warn-bg)';
+          tr.innerHTML = `
+            <td title="${i.color}">${i.color}</td>
+            <td style="font-weight:600">${i.size}</td>
+            <td style="font-weight:600;text-align:center">${qty}</td>
+            <td style="font-size:12px">${costStr}${lotLabel}</td>
+            <td style="color:var(--text2)">${svStr}</td>
+            <td>${badge}</td>
+            <td><button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">${watchIcon}</button></td>
+            <td><button class="btn btn-danger btn-sm" onclick="removeItem('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">Remove</button></td>`;
+          tbody.appendChild(tr);
+        });
+
+        tbl.appendChild(tbody);
+        tblWrap.appendChild(tbl);
+        styleBody.appendChild(tblWrap);
+        styleGroup.appendChild(styleHdr);
+        styleGroup.appendChild(styleBody);
+        brandBody.appendChild(styleGroup);
       });
 
-      tbl.appendChild(tbody);
-      tblWrap.appendChild(tbl);
-      brandBody.appendChild(tblWrap);
       brandGroup.appendChild(brandHdr);
       brandGroup.appendChild(brandBody);
       typeBody.appendChild(brandGroup);
