@@ -1727,18 +1727,16 @@ function renderTable() {
     typeBody.dataset.typeKey = type;
     typeHdr.dataset.typeKey  = type;
     typeHdr.addEventListener('click', () => {
-      const key  = typeHdr.dataset.typeKey;
-      const body = container.querySelector(`.inv-type-body[data-type-key="${CSS.escape(key)}"]`);
-      if(!body) return;
-      const nowOpen = body.style.display === 'none';
-      body.style.display = nowOpen ? '' : 'none';
+      const nowOpen = typeBody.style.display === 'none';
+      typeBody.style.display = nowOpen ? '' : 'none';
       typeHdr.classList.toggle('open', nowOpen);
       typeHdr.querySelector('.inv-type-toggle').textContent = nowOpen ? '▼' : '▶';
-      if(nowOpen) openTypes.add(key); else openTypes.delete(key);
+      if(nowOpen) openTypes.add(type); else openTypes.delete(type);
       container._openTypes = [...openTypes];
     });
 
     // Brand subgroups
+    const openStyles = new Set(container._openStyles || []);
     Object.keys(brands).sort().forEach(brand => {
       const items     = brands[brand];
       const brandKey  = `${type}::${brand}`;
@@ -1775,18 +1773,14 @@ function renderTable() {
       brandHdr.dataset.brandKey = brandKey;
       brandHdr.addEventListener('click', e => {
         e.stopPropagation();
-        const key  = brandHdr.dataset.brandKey;
-        const body = container.querySelector(`.inv-brand-body[data-brand-key="${CSS.escape(key)}"]`);
-        if(!body) return;
-        const nowOpen = body.style.display === 'none';
-        body.style.display = nowOpen ? '' : 'none';
+        const nowOpen = brandBody.style.display === 'none';
+        brandBody.style.display = nowOpen ? '' : 'none';
         brandHdr.querySelector('.inv-brand-toggle').textContent = nowOpen ? '▼' : '▶';
-        if(nowOpen) openBrands.add(key); else openBrands.delete(key);
+        if(nowOpen) openBrands.add(brandKey); else openBrands.delete(brandKey);
         container._openBrands = [...openBrands];
       });
 
       // Style subgroups within brand
-      const openStyles = new Set(container._openStyles || []);
       Object.keys(styleGroups).sort().forEach(style => {
         const styleItems  = styleGroups[style];
         const styleKey    = `${type}::${brand}::${style}`;
@@ -1814,13 +1808,10 @@ function renderTable() {
 
         styleHdr.addEventListener('click', e => {
           e.stopPropagation();
-          const key  = styleHdr.dataset.styleKey;
-          const body = container.querySelector(`.inv-style-body[data-style-key="${CSS.escape(key)}"]`);
-          if(!body) return;
-          const nowOpen = body.style.display === 'none';
-          body.style.display = nowOpen ? '' : 'none';
+          const nowOpen = styleBody.style.display === 'none';
+          styleBody.style.display = nowOpen ? '' : 'none';
           styleHdr.querySelector('.inv-style-toggle').textContent = nowOpen ? '▼' : '▶';
-          if(nowOpen) openStyles.add(key); else openStyles.delete(key);
+          if(nowOpen) openStyles.add(styleKey); else openStyles.delete(styleKey);
           container._openStyles = [...openStyles];
         });
 
