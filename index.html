@@ -238,6 +238,25 @@
     @media (max-width: 600px) { .rpt-two-col { grid-template-columns: 1fr; } }
     .rpt-empty { color: var(--text3); font-size: 13px; padding: 1rem 0; }
 
+    /* INVENTORY GROUPS */
+    .inv-type-group { margin-bottom: 12px; }
+    .inv-type-header { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-lg); cursor:pointer; user-select:none; }
+    .inv-type-header:hover { background:var(--bg2); }
+    .inv-type-header.open { border-radius:var(--radius-lg) var(--radius-lg) 0 0; border-bottom-color:transparent; }
+    .inv-type-label { font-size:15px; font-weight:700; flex:1; }
+    .inv-type-meta { font-size:12px; color:var(--text2); }
+    .inv-type-toggle { font-size:11px; color:var(--text3); }
+    .inv-type-body { border:0.5px solid var(--border); border-top:none; border-radius:0 0 var(--radius-lg) var(--radius-lg); overflow:hidden; margin-bottom:0; }
+
+    .inv-brand-group { border-top:0.5px solid var(--border); }
+    .inv-brand-group:first-child { border-top:none; }
+    .inv-brand-header { display:flex; align-items:center; gap:10px; padding:8px 14px; background:var(--bg2); cursor:pointer; user-select:none; }
+    .inv-brand-header:hover { background:var(--bg3); }
+    .inv-brand-label { font-size:13px; font-weight:600; flex:1; }
+    .inv-brand-meta { font-size:12px; color:var(--text2); }
+    .inv-brand-toggle { font-size:11px; color:var(--text3); }
+    .inv-brand-body { display:none; }
+
     /* ORDER LOG GROUPS */
     .order-group { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 10px; overflow: hidden; }
     .order-group-header { display: flex; align-items: center; gap: 12px; padding: 11px 14px; background: var(--bg2); flex-wrap: wrap; cursor: pointer; user-select: none; }
@@ -289,12 +308,7 @@
         <select id="filter-color" onchange="renderTable()"><option value="">All colors</option></select>
         <select id="filter-size"  onchange="renderTable()"><option value="">All sizes</option></select>
       </div>
-      <div class="tbl-wrap">
-        <table>
-          <thead><tr><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Stock value</th><th>Status</th><th title="Watch for reorder">🔔</th><th></th></tr></thead>
-          <tbody id="inv-body"></tbody>
-        </table>
-      </div>
+      <div id="inv-groups"></div>
     </div>
 
     <!-- ── ADD STOCK ── -->
@@ -1639,40 +1653,179 @@ function renderTable() {
   const fs  = document.getElementById('filter-size').value;
   const ft  = document.getElementById('filter-type').value;
   const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
-  let rows = inventory.filter(i=>(!ft||i.type===ft)&&(!fb||i.brand===fb)&&(!fst||i.style===fst)&&(!fc||i.color===fc)&&(!fs||i.size===fs));
-  rows.sort((a,b)=>a.type.localeCompare(b.type)||a.brand.localeCompare(b.brand)||(a.style||'').localeCompare(b.style||'')||a.color.localeCompare(b.color)||sizeOrder.indexOf(a.size)-sizeOrder.indexOf(b.size));
-  const tbody = document.getElementById('inv-body');
-  if(!rows.length) { tbody.innerHTML=`<tr><td colspan="11" class="empty">No inventory yet — add stock to get started</td></tr>`; return; }
-  tbody.innerHTML = rows.map(i=>{
-    const qty   = itemTotalQty(i);
-    const range = itemCostRange(i);
-    const sv    = itemStockValue(i);
-    const badge = qty===0?'<span class="badge badge-zero">Out</span>':qty<=lowThreshold?'<span class="badge badge-low">Low</span>':'<span class="badge badge-ok">In stock</span>';
-    const svStr = sv>0 ? '$'+sv.toFixed(2) : '—';
-    const costStr = range ? `<span title="${i.lots.filter(l=>l.qty>0).map(l=>`${l.qty}× ${fmt(l.cost)}`).join(', ')}">${range.display}</span>` : '—';
-    const e = v=>esc(v);
-    const watchClass = i.watch ? 'btn-watch watching' : 'btn-watch';
-    const watchIcon  = i.watch ? '🔔' : '🔕';
-    const watchTitle = i.watch ? 'Watching — click to stop' : 'Click to watch for reorder';
-    const lotCount   = i.lots.length;
-    return `<tr${i.watch&&qty<=lowThreshold?' style="background:var(--warn-bg)"':''}>
-      <td title="${i.type}">${i.type}</td>
-      <td title="${i.brand}">${i.brand}</td>
-      <td><span class="style-tag">${i.style||'—'}</span></td>
-      <td title="${i.color}">${i.color}</td>
-      <td style="font-weight:600">${i.size}</td>
-      <td><div class="qty-ctrl">
-        <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',-1)">−</button>
-        <span class="qty-val">${qty}</span>
-        <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',1)">+</button>
-      </div></td>
-      <td style="font-size:12px">${costStr}${lotCount>1?` <span style="color:var(--text3);font-size:10px">(${lotCount} lots)</span>`:''}</td>
-      <td style="color:var(--text2)">${svStr}</td>
-      <td>${badge}</td>
-      <td><button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">${watchIcon}</button></td>
-      <td><button class="btn btn-danger btn-sm" onclick="removeItem('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">Remove</button></td>
-    </tr>`;
-  }).join('');
+
+  const filtered = inventory.filter(i =>
+    (!ft||i.type===ft) && (!fb||i.brand===fb) &&
+    (!fst||i.style===fst) && (!fc||i.color===fc) && (!fs||i.size===fs)
+  );
+
+  const container = document.getElementById('inv-groups');
+  if(!filtered.length) {
+    container.innerHTML = `<div class="empty">No inventory yet — add stock to get started</div>`;
+    renderReorderPanel();
+    return;
+  }
+
+  // Group by type, then brand
+  const typeGroups = {};
+  filtered.forEach(i => {
+    if(!typeGroups[i.type]) typeGroups[i.type] = {};
+    if(!typeGroups[i.type][i.brand]) typeGroups[i.type][i.brand] = [];
+    typeGroups[i.type][i.brand].push(i);
+  });
+
+  // Sort items within brand groups
+  Object.values(typeGroups).forEach(brands =>
+    Object.values(brands).forEach(items =>
+      items.sort((a,b) =>
+        (a.style||'').localeCompare(b.style||'') ||
+        a.color.localeCompare(b.color) ||
+        sizeOrder.indexOf(a.size) - sizeOrder.indexOf(b.size)
+      )
+    )
+  );
+
+  // Preserve collapse state across re-renders
+  const openTypes  = new Set(container._openTypes  || []);
+  const openBrands = new Set(container._openBrands || []);
+
+  container.innerHTML = '';
+
+  Object.keys(typeGroups).sort().forEach(type => {
+    const brands    = typeGroups[type];
+    const typeItems = Object.values(brands).flat();
+    const typeQty   = typeItems.reduce((s,i)=>s+itemTotalQty(i), 0);
+    const typeVal   = typeItems.reduce((s,i)=>s+itemStockValue(i), 0);
+    const isTypeOpen = openTypes.has(type);
+
+    const typeEl = document.createElement('div');
+    typeEl.className = 'inv-type-group';
+
+    // Type header
+    const typeHdr = document.createElement('div');
+    typeHdr.className = 'inv-type-header' + (isTypeOpen ? ' open' : '');
+    typeHdr.innerHTML = `
+      <span class="inv-type-toggle">${isTypeOpen ? '▼' : '▶'}</span>
+      <span class="inv-type-label">${type}</span>
+      <span class="inv-type-meta">${typeQty} unit${typeQty!==1?'s':''}</span>
+      ${typeVal>0 ? `<span class="inv-type-meta">·</span><span class="inv-type-meta">$${typeVal.toFixed(2)}</span>` : ''}
+      <span class="inv-type-meta" style="margin-left:4px">${Object.keys(brands).length} brand${Object.keys(brands).length!==1?'s':''}</span>`;
+
+    const typeBody = document.createElement('div');
+    typeBody.className = 'inv-type-body';
+    typeBody.style.display = isTypeOpen ? '' : 'none';
+
+    typeHdr.addEventListener('click', () => {
+      const nowOpen = typeBody.style.display === 'none';
+      typeBody.style.display = nowOpen ? '' : 'none';
+      typeHdr.classList.toggle('open', nowOpen);
+      typeHdr.querySelector('.inv-type-toggle').textContent = nowOpen ? '▼' : '▶';
+      // Persist state
+      if(nowOpen) openTypes.add(type); else openTypes.delete(type);
+      container._openTypes = [...openTypes];
+    });
+
+    // Brand subgroups
+    Object.keys(brands).sort().forEach(brand => {
+      const items     = brands[brand];
+      const brandKey  = `${type}::${brand}`;
+      const brandQty  = items.reduce((s,i)=>s+itemTotalQty(i), 0);
+      const brandVal  = items.reduce((s,i)=>s+itemStockValue(i), 0);
+      const isBrandOpen = openBrands.has(brandKey);
+
+      const brandGroup = document.createElement('div');
+      brandGroup.className = 'inv-brand-group';
+
+      const brandHdr = document.createElement('div');
+      brandHdr.className = 'inv-brand-header';
+      brandHdr.innerHTML = `
+        <span class="inv-brand-toggle">${isBrandOpen ? '▼' : '▶'}</span>
+        <span class="inv-brand-label">${brand}</span>
+        <span class="inv-brand-meta">${brandQty} unit${brandQty!==1?'s':''}</span>
+        ${brandVal>0 ? `<span class="inv-brand-meta">· $${brandVal.toFixed(2)}</span>` : ''}
+        <span class="inv-brand-meta">${items.length} SKU${items.length!==1?'s':''}</span>`;
+
+      const brandBody = document.createElement('div');
+      brandBody.className = 'inv-brand-body';
+      brandBody.style.display = isBrandOpen ? '' : 'none';
+
+      brandHdr.addEventListener('click', e => {
+        e.stopPropagation();
+        const nowOpen = brandBody.style.display === 'none';
+        brandBody.style.display = nowOpen ? '' : 'none';
+        brandHdr.querySelector('.inv-brand-toggle').textContent = nowOpen ? '▼' : '▶';
+        if(nowOpen) openBrands.add(brandKey); else openBrands.delete(brandKey);
+        container._openBrands = [...openBrands];
+      });
+
+      // Items table
+      const tblWrap = document.createElement('div');
+      tblWrap.className = 'tbl-wrap';
+      tblWrap.style.borderRadius = '0';
+      tblWrap.style.border = 'none';
+      tblWrap.style.borderTop = '0.5px solid var(--border)';
+
+      const tbl = document.createElement('table');
+      tbl.innerHTML = `<thead><tr>
+        <th>Style</th><th>Color</th><th>Size</th><th>Qty</th>
+        <th>Cost/unit</th><th>Stock value</th><th>Status</th>
+        <th title="Watch for reorder">🔔</th><th></th>
+      </tr></thead>`;
+
+      const tbody = document.createElement('tbody');
+      items.forEach(i => {
+        const qty   = itemTotalQty(i);
+        const range = itemCostRange(i);
+        const sv    = itemStockValue(i);
+        const badge = qty===0 ? '<span class="badge badge-zero">Out</span>'
+                    : qty<=lowThreshold ? '<span class="badge badge-low">Low</span>'
+                    : '<span class="badge badge-ok">In stock</span>';
+        const svStr   = sv>0 ? '$'+sv.toFixed(2) : '—';
+        const costStr = range
+          ? `<span title="${i.lots.filter(l=>l.qty>0).map(l=>`${l.qty}× ${fmt(l.cost)}`).join(', ')}">${range.display}</span>`
+          : '—';
+        const lotLabel = i.lots.length>1 ? ` <span style="color:var(--text3);font-size:10px">(${i.lots.length} lots)</span>` : '';
+        const e = v => esc(v);
+        const watchClass = i.watch ? 'btn-watch watching' : 'btn-watch';
+        const watchIcon  = i.watch ? '🔔' : '🔕';
+        const watchTitle = i.watch ? 'Watching — click to stop' : 'Click to watch for reorder';
+
+        const tr = document.createElement('tr');
+        if(i.watch && qty<=lowThreshold) tr.style.background = 'var(--warn-bg)';
+        tr.innerHTML = `
+          <td><span class="style-tag">${i.style||'—'}</span></td>
+          <td title="${i.color}">${i.color}</td>
+          <td style="font-weight:600">${i.size}</td>
+          <td><div class="qty-ctrl">
+            <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',-1)">−</button>
+            <span class="qty-val">${qty}</span>
+            <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',1)">+</button>
+          </div></td>
+          <td style="font-size:12px">${costStr}${lotLabel}</td>
+          <td style="color:var(--text2)">${svStr}</td>
+          <td>${badge}</td>
+          <td><button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">${watchIcon}</button></td>
+          <td><button class="btn btn-danger btn-sm" onclick="removeItem('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}')">Remove</button></td>`;
+        tbody.appendChild(tr);
+      });
+
+      tbl.appendChild(tbody);
+      tblWrap.appendChild(tbl);
+      brandBody.appendChild(tblWrap);
+      brandGroup.appendChild(brandHdr);
+      brandGroup.appendChild(brandBody);
+      typeBody.appendChild(brandGroup);
+    });
+
+    typeEl.appendChild(typeHdr);
+    typeEl.appendChild(typeBody);
+    container.appendChild(typeEl);
+  });
+
+  // Save open state refs on container
+  container._openTypes  = [...openTypes];
+  container._openBrands = [...openBrands];
+
   renderReorderPanel();
 }
 function toggleWatch(t,b,st,c,s) {
