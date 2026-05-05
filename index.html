@@ -255,7 +255,7 @@
     .inv-brand-label { font-size:13px; font-weight:600; flex:1; }
     .inv-brand-meta { font-size:12px; color:var(--text2); }
     .inv-brand-toggle { font-size:11px; color:var(--text3); }
-    .inv-brand-body { display:none; }
+    .inv-brand-body { }
 
     /* ORDER LOG GROUPS */
     .order-group { background: var(--bg); border: 0.5px solid var(--border); border-radius: var(--radius-lg); margin-bottom: 10px; overflow: hidden; }
@@ -1715,13 +1715,17 @@ function renderTable() {
     typeBody.className = 'inv-type-body';
     typeBody.style.display = isTypeOpen ? '' : 'none';
 
+    typeBody.dataset.typeKey = type;
+    typeHdr.dataset.typeKey  = type;
     typeHdr.addEventListener('click', () => {
-      const nowOpen = typeBody.style.display === 'none';
-      typeBody.style.display = nowOpen ? '' : 'none';
+      const key  = typeHdr.dataset.typeKey;
+      const body = container.querySelector(`.inv-type-body[data-type-key="${CSS.escape(key)}"]`);
+      if(!body) return;
+      const nowOpen = body.style.display === 'none';
+      body.style.display = nowOpen ? '' : 'none';
       typeHdr.classList.toggle('open', nowOpen);
       typeHdr.querySelector('.inv-type-toggle').textContent = nowOpen ? '▼' : '▶';
-      // Persist state
-      if(nowOpen) openTypes.add(type); else openTypes.delete(type);
+      if(nowOpen) openTypes.add(key); else openTypes.delete(key);
       container._openTypes = [...openTypes];
     });
 
@@ -1747,14 +1751,19 @@ function renderTable() {
 
       const brandBody = document.createElement('div');
       brandBody.className = 'inv-brand-body';
+      brandBody.dataset.brandKey = brandKey;
       brandBody.style.display = isBrandOpen ? '' : 'none';
 
+      brandHdr.dataset.brandKey = brandKey;
       brandHdr.addEventListener('click', e => {
         e.stopPropagation();
-        const nowOpen = brandBody.style.display === 'none';
-        brandBody.style.display = nowOpen ? '' : 'none';
+        const key  = brandHdr.dataset.brandKey;
+        const body = container.querySelector(`.inv-brand-body[data-brand-key="${CSS.escape(key)}"]`);
+        if(!body) return;
+        const nowOpen = body.style.display === 'none';
+        body.style.display = nowOpen ? '' : 'none';
         brandHdr.querySelector('.inv-brand-toggle').textContent = nowOpen ? '▼' : '▶';
-        if(nowOpen) openBrands.add(brandKey); else openBrands.delete(brandKey);
+        if(nowOpen) openBrands.add(key); else openBrands.delete(key);
         container._openBrands = [...openBrands];
       });
 
