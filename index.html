@@ -2760,17 +2760,23 @@ function renderReports() {
 
   // ── Purchased detail table ──────────────────────────────────────
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
-    <div class="rpt-collapse-header has-open-body" id="rpt-purchased-hdr" onclick="toggleRptSection('rpt-purchased')">
+    <div class="rpt-collapse-header" id="rpt-purchased-hdr" onclick="toggleRptSection('rpt-purchased')">
       <span class="rpt-collapse-header-text">Inventory purchased this month (${added.length} entries)${shopFilter?' <span style=\"font-size:11px;color:var(--text2);font-weight:400\"> — stock additions are not shop-specific</span>':''}</span>
-      <span class="rpt-collapse-btn open" id="rpt-purchased-btn">▼</span>
-    </div>
-    <div class="rpt-collapse-body" id="rpt-purchased">`;
+      <span class="rpt-collapse-btn" id="rpt-purchased-btn">▶</span>
+    </div>`;
+  if(added.length) {
+    html += `<div style="display:flex;gap:24px;padding:8px 14px;background:var(--bg2);border-top:0.5px solid var(--border);font-size:12px;color:var(--text2)">
+      <span><strong style="color:var(--text)">${addedQty}</strong> units</span>
+      ${addedCost>0?`<span><strong style="color:var(--text)">$${addedCost.toFixed(2)}</strong> total cost</span>`:''}
+      ${addedQty>0&&addedCost>0?`<span><strong style="color:var(--text)">$${(addedCost/addedQty).toFixed(2)}</strong> avg/unit</span>`:''}
+    </div>`;
+  }
+  html += `<div class="rpt-collapse-body" id="rpt-purchased" style="display:none">`;
   if(added.length) {
     html += `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Total cost</th></tr></thead><tbody>`;
     added.forEach(e => {
       html += `<tr><td>${e.date}</td><td>${e.type}</td><td>${e.brand}</td><td>${e.style||'—'}</td><td>${e.color}</td><td>${e.size}</td><td>${e.qty}</td><td>${e.cost!=null?'$'+e.cost.toFixed(2):'—'}</td><td>${e.totalCost!=null?'$'+e.totalCost.toFixed(2):'—'}</td></tr>`;
     });
-    html += `<tr style="font-weight:600;background:var(--bg2)"><td colspan="6">Total</td><td>${addedQty}</td><td></td><td>${addedCost>0?'$'+addedCost.toFixed(2):'—'}</td></tr>`;
     html += `</tbody></table></div>`;
   } else {
     html += `<p class="rpt-empty" style="padding:1rem 14px">No stock additions logged this month.</p>`;
@@ -2779,17 +2785,23 @@ function renderReports() {
 
   // ── Pressed detail table ────────────────────────────────────────
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
-    <div class="rpt-collapse-header has-open-body" id="rpt-pressed-hdr" onclick="toggleRptSection('rpt-pressed')">
+    <div class="rpt-collapse-header" id="rpt-pressed-hdr" onclick="toggleRptSection('rpt-pressed')">
       <span class="rpt-collapse-header-text">Orders pressed this month (${pressed.length} entries)</span>
-      <span class="rpt-collapse-btn open" id="rpt-pressed-btn">▼</span>
-    </div>
-    <div class="rpt-collapse-body" id="rpt-pressed">`;
+      <span class="rpt-collapse-btn" id="rpt-pressed-btn">▶</span>
+    </div>`;
+  if(pressed.length) {
+    html += `<div style="display:flex;gap:24px;padding:8px 14px;background:var(--bg2);border-top:0.5px solid var(--border);font-size:12px;color:var(--text2)">
+      <span><strong style="color:var(--text)">${pressedQty}</strong> units</span>
+      ${pressedCost>0?`<span><strong style="color:var(--text)">$${pressedCost.toFixed(2)}</strong> total blank cost</span>`:''}
+      ${pressedQty>0&&pressedCost>0?`<span><strong style="color:var(--text)">$${(pressedCost/pressedQty).toFixed(2)}</strong> avg/unit</span>`:''}
+    </div>`;
+  }
+  html += `<div class="rpt-collapse-body" id="rpt-pressed" style="display:none">`;
   if(pressed.length) {
     html += `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th></tr></thead><tbody>`;
     pressed.forEach(o => {
       html += `<tr><td>${o.date}</td><td>${o.shop||'—'}</td><td>${o.orderNum||'—'}</td><td>${o.type}</td><td>${o.brand}</td><td>${o.style||'—'}</td><td>${o.color}</td><td>${o.size}</td><td>${o.qty}</td><td>${o.blankCost!=null?'$'+o.blankCost.toFixed(2):'—'}</td></tr>`;
     });
-    html += `<tr style="font-weight:600;background:var(--bg2)"><td colspan="8">Total</td><td>${pressedQty}</td><td>${pressedCost>0?'$'+pressedCost.toFixed(2):'—'}</td></tr>`;
     html += `</tbody></table></div>`;
   } else {
     html += `<p class="rpt-empty" style="padding:1rem 14px">No press orders logged this month.</p>`;
