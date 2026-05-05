@@ -551,13 +551,28 @@
 
     <!-- ── ORDER LOG ── -->
     <div id="tab-log" style="display:none">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:8px">
         <div class="filter-row" style="margin-bottom:0;flex:1;min-width:0">
           <select id="log-filter-shop" onchange="renderLog()"><option value="">All shops</option></select>
           <select id="log-filter-type" onchange="renderLog()"><option value="">All types</option></select>
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn btn-sm" onclick="toggleLogSort()" id="log-sort-btn" title="Toggle date sort">Date ▼</button>
+        </div>
+      </div>
+      <!-- Date filter row -->
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:1rem">
+        <span style="font-size:12px;color:var(--text2);flex-shrink:0">Period:</span>
+        <div style="display:flex;gap:0;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+          <button class="btn" id="log-period-all"       style="border:none;border-radius:0;padding:5px 12px;font-size:12px;background:var(--text);color:var(--bg)" onclick="setLogPeriod('all')">All time</button>
+          <button class="btn" id="log-period-curmonth"  style="border:none;border-radius:0;padding:5px 12px;font-size:12px;border-left:0.5px solid var(--border2)" onclick="setLogPeriod('curmonth')">This month</button>
+          <button class="btn" id="log-period-lastmonth" style="border:none;border-radius:0;padding:5px 12px;font-size:12px;border-left:0.5px solid var(--border2)" onclick="setLogPeriod('lastmonth')">Last month</button>
+          <button class="btn" id="log-period-custom"    style="border:none;border-radius:0;padding:5px 12px;font-size:12px;border-left:0.5px solid var(--border2)" onclick="setLogPeriod('custom')">Custom</button>
+        </div>
+        <div id="log-custom-range" style="display:none;gap:6px;align-items:center;flex-wrap:wrap">
+          <input type="date" id="log-date-from" onchange="renderLog()" style="padding:5px 8px;font-size:12px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+          <span style="font-size:12px;color:var(--text2)">to</span>
+          <input type="date" id="log-date-to" onchange="renderLog()" style="padding:5px 8px;font-size:12px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
         </div>
       </div>
       <div id="log-stats" style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap"></div>
@@ -2193,14 +2208,48 @@ function submitPressOrder() {
   populatePressDropdowns();
 }
 
-// ── ORDER LOG ──────────────────────────────────────────────────────
-let logSortDir = 'desc'; // 'desc' = newest first, 'asc' = oldest first
+let logSortDir = 'desc';
+let logPeriod  = 'all'; // 'curmonth' | 'lastmonth' | 'all' | 'custom'
 
 function toggleLogSort() {
   logSortDir = logSortDir === 'desc' ? 'asc' : 'desc';
   const btn = document.getElementById('log-sort-btn');
   if(btn) btn.textContent = logSortDir === 'desc' ? 'Date ▼' : 'Date ▲';
   renderLog();
+}
+
+function setLogPeriod(period) {
+  logPeriod = period;
+  // Update button highlight
+  ['curmonth','lastmonth','all','custom'].forEach(p => {
+    const btn = document.getElementById(`log-period-${p}`);
+    if(!btn) return;
+    const active = p === period;
+    btn.style.background = active ? 'var(--text)' : '';
+    btn.style.color      = active ? 'var(--bg)'   : '';
+  });
+  // Show/hide custom range inputs
+  const customRange = document.getElementById('log-custom-range');
+  if(customRange) customRange.style.display = period === 'custom' ? 'flex' : 'none';
+  renderLog();
+}
+
+function getLogDateRange() {
+  const now = new Date();
+  if(logPeriod === 'curmonth') {
+    return { start: new Date(now.getFullYear(), now.getMonth(), 1), end: new Date(now.getFullYear(), now.getMonth()+1, 1) };
+  }
+  if(logPeriod === 'lastmonth') {
+    return { start: new Date(now.getFullYear(), now.getMonth()-1, 1), end: new Date(now.getFullYear(), now.getMonth(), 1) };
+  }
+  if(logPeriod === 'custom') {
+    const fromVal = document.getElementById('log-date-from')?.value;
+    const toVal   = document.getElementById('log-date-to')?.value;
+    const start   = fromVal ? new Date(fromVal + 'T00:00:00') : null;
+    const end     = toVal   ? new Date(toVal   + 'T23:59:59') : null;
+    return { start, end };
+  }
+  return { start: null, end: null }; // all time
 }
 
 function updateLogFilters() {
@@ -2211,7 +2260,21 @@ function updateLogFilters() {
 function renderLog() {
   const fs = document.getElementById('log-filter-shop').value;
   const ft = document.getElementById('log-filter-type').value;
-  const rows = orderLog.filter(o=>(!fs||o.shop===fs)&&(!ft||o.type===ft));
+  const { start, end } = getLogDateRange();
+
+  const rows = orderLog.filter(o => {
+    if(!(!fs||o.shop===fs)|| !(!ft||o.type===ft)) return false;
+    if(start || end) {
+      const d = o.isoDate ? new Date(o.isoDate) : new Date(o.date);
+      if(start && d < start) return false;
+      if(end   && d > end)   return false;
+    }
+    return true;
+  });
+
+  // Period label for stats
+  const periodLabels = { curmonth:'This month', lastmonth:'Last month', all:'All time', custom:'Custom range' };
+  const periodLabel = periodLabels[logPeriod] || '';
 
   // Summary stats
   const totalUnits   = rows.reduce((s,o)=>s+o.qty, 0);
@@ -2219,13 +2282,17 @@ function renderLog() {
   const hasCost      = rows.some(o=>o.blankCost!=null);
   const uniqueOrders = new Set(rows.map(o=>o.orderNum).filter(Boolean)).size;
   document.getElementById('log-stats').innerHTML =
-    `<div class="stat" style="padding:8px 14px"><div class="stat-label">Orders</div><div class="stat-val" style="font-size:17px">${uniqueOrders}</div></div>`+
+    `<div class="stat" style="padding:8px 14px"><div class="stat-label">Orders ${periodLabel?'· '+periodLabel:''}</div><div class="stat-val" style="font-size:17px">${uniqueOrders}</div></div>`+
     `<div class="stat" style="padding:8px 14px"><div class="stat-label">Line items</div><div class="stat-val" style="font-size:17px">${rows.length}</div></div>`+
     `<div class="stat" style="padding:8px 14px"><div class="stat-label">Units pressed</div><div class="stat-val" style="font-size:17px">${totalUnits}</div></div>`+
     (hasCost?`<div class="stat" style="padding:8px 14px"><div class="stat-label">Total blank cost</div><div class="stat-val" style="font-size:17px">$${totalCost.toFixed(2)}</div></div>`:'');
 
   const container = document.getElementById('log-groups');
-  if(!rows.length) { container.innerHTML=`<div class="empty">No orders logged yet</div>`; return; }
+  if(logPeriod === 'custom' && !start && !end) {
+    container.innerHTML = `<div class="empty">Select a date range above to filter orders.</div>`;
+    return;
+  }
+  if(!rows.length) { container.innerHTML=`<div class="empty">No orders found for this period.</div>`; return; }
 
   // Group by orderNum; ungrouped lines get a unique key per entry
   const groups = {};
