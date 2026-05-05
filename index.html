@@ -1805,11 +1805,7 @@ function renderTable() {
           <td><span class="style-tag">${i.style||'—'}</span></td>
           <td title="${i.color}">${i.color}</td>
           <td style="font-weight:600">${i.size}</td>
-          <td><div class="qty-ctrl">
-            <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',-1)">−</button>
-            <span class="qty-val">${qty}</span>
-            <button class="qty-btn" onclick="adjustQty('${e(i.type)}','${e(i.brand)}','${e(i.style)}','${e(i.color)}','${i.size}',1)">+</button>
-          </div></td>
+          <td style="font-weight:600;text-align:center">${qty}</td>
           <td style="font-size:12px">${costStr}${lotLabel}</td>
           <td style="color:var(--text2)">${svStr}</td>
           <td>${badge}</td>
@@ -1866,21 +1862,6 @@ function renderReorderPanel() {
   panel.style.display = 'block';
 }
 
-function adjustQty(t,b,st,c,s,delta) {
-  const item=getItem(t,b,st,c,s); if(!item) return;
-  if(delta > 0) {
-    // Add to the most recent lot if it exists, else create one
-    if(item.lots.length) item.lots[item.lots.length-1].qty += delta;
-    else item.lots.push({qty:delta, cost:null, isoDate:new Date().toISOString()});
-  } else {
-    // Deduct FIFO
-    const available = itemTotalQty(item);
-    if(available === 0) return;
-    deductFIFO(item, 1);
-  }
-  item.qty = itemTotalQty(item);
-  save(); renderTable(); updateStats();
-}
 function removeItem(t,b,st,c,s) {
   const item = inventory.find(i=>i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s);
   if(!item) return;
