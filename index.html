@@ -599,6 +599,36 @@
         </div>
       </div>
       <div id="log-stats" style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap"></div>
+
+      <!-- Advanced filters -->
+      <div style="margin-bottom:1rem">
+        <button class="btn btn-sm" id="log-adv-toggle-btn" onclick="toggleLogAdvanced()" style="font-size:12px">
+          ⚙ Advanced filters <span id="log-adv-active-badge" style="display:none;margin-left:4px;background:var(--text);color:var(--bg);border-radius:10px;padding:1px 7px;font-size:10px;font-weight:700">●</span>
+        </button>
+        <div id="log-adv-panel" style="display:none;margin-top:10px;padding:12px 14px;background:var(--bg2);border-radius:var(--radius);border:0.5px solid var(--border)">
+          <p class="sub-label" style="margin-bottom:10px">Filter: show orders where at least one line matches all active criteria</p>
+          <div class="g4" style="margin-bottom:10px">
+            <div class="field">
+              <span class="label">Brand</span>
+              <select id="log-adv-brand" onchange="renderLog()"><option value="">Any brand</option></select>
+            </div>
+            <div class="field">
+              <span class="label">Style / SKU</span>
+              <select id="log-adv-style" onchange="renderLog()"><option value="">Any style</option></select>
+            </div>
+            <div class="field">
+              <span class="label">Color</span>
+              <select id="log-adv-color" onchange="renderLog()"><option value="">Any color</option></select>
+            </div>
+            <div class="field">
+              <span class="label">Min units in order</span>
+              <input type="number" id="log-adv-minunits" min="1" placeholder="e.g. 24" oninput="renderLog()" style="padding:9px 11px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+            </div>
+          </div>
+          <button class="btn btn-sm btn-danger" onclick="clearLogAdvanced()">Clear advanced filters</button>
+        </div>
+      </div>
+
       <div id="log-groups"></div>
     </div>
 
@@ -2445,18 +2475,68 @@ function getLogDateRange() {
   return { start: null, end: null }; // all time
 }
 
+function toggleLogAdvanced() {
+  const panel = document.getElementById('log-adv-panel');
+  const btn   = document.getElementById('log-adv-toggle-btn');
+  const open  = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : '';
+}
+
+function clearLogAdvanced() {
+  document.getElementById('log-adv-brand').value    = '';
+  document.getElementById('log-adv-style').value    = '';
+  document.getElementById('log-adv-color').value    = '';
+  document.getElementById('log-adv-minunits').value = '';
+  renderLog();
+}
+
+function getLogAdvancedFilters() {
+  return {
+    brand:    document.getElementById('log-adv-brand')?.value    || '',
+    style:    document.getElementById('log-adv-style')?.value    || '',
+    color:    document.getElementById('log-adv-color')?.value    || '',
+    minUnits: parseInt(document.getElementById('log-adv-minunits')?.value) || 0,
+  };
+}
+
+function advFiltersActive(adv) {
+  return !!(adv.brand || adv.style || adv.color || adv.minUnits > 0);
+}
+
+function lineMatchesAdv(line, adv) {
+  if(adv.brand    && line.brand !== adv.brand)   return false;
+  if(adv.style    && line.style !== adv.style)   return false;
+  if(adv.color    && line.color !== adv.color)   return false;
+  return true;
+}
+
 function updateLogFilters() {
   buildFilterSelect('log-filter-shop','shops',orderLog.map(o=>o.shop).filter(Boolean));
   buildFilterSelect('log-filter-type','types',orderLog.map(o=>o.type));
+  // Populate advanced filter dropdowns from all log entries
+  buildFilterSelect('log-adv-brand','brands', orderLog.map(o=>o.brand).filter(Boolean));
+  buildFilterSelect('log-adv-style','styles', orderLog.map(o=>o.style).filter(Boolean));
+  buildFilterSelect('log-adv-color','colors', orderLog.map(o=>o.color).filter(Boolean));
+  // Fix labels to say "Any X" instead of "All X"
+  ['log-adv-brand','log-adv-style','log-adv-color'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el?.options[0]) el.options[0].text = el.options[0].text.replace('All ','Any ');
+  });
 }
 
 function renderLog() {
-  const fs = document.getElementById('log-filter-shop').value;
-  const ft = document.getElementById('log-filter-type').value;
+  const fs  = document.getElementById('log-filter-shop').value;
+  const ft  = document.getElementById('log-filter-type').value;
+  const adv = getLogAdvancedFilters();
   const { start, end } = getLogDateRange();
 
+  // Update active badge
+  const badge = document.getElementById('log-adv-active-badge');
+  if(badge) badge.style.display = advFiltersActive(adv) ? '' : 'none';
+
+  // Base row filter (shop, type, date)
   const rows = orderLog.filter(o => {
-    if(!(!fs||o.shop===fs)|| !(!ft||o.type===ft)) return false;
+    if(!(!fs||o.shop===fs) || !(!ft||o.type===ft)) return false;
     if(start || end) {
       const d = o.isoDate ? new Date(o.isoDate) : new Date(o.date);
       if(start && d < start) return false;
@@ -2465,18 +2545,38 @@ function renderLog() {
     return true;
   });
 
+  // Group by orderNum first, then apply advanced filters at group level
+  const rawGroups = {};
+  rows.forEach(o => {
+    const key = o.orderNum || `__ungrouped_${o.id}`;
+    if(!rawGroups[key]) rawGroups[key] = [];
+    rawGroups[key].push(o);
+  });
+
+  // Advanced filter: keep groups where total units meet minUnits AND
+  // at least one line matches brand/style/color criteria
+  const groups = {};
+  Object.entries(rawGroups).forEach(([key, lines]) => {
+    if(!advFiltersActive(adv)) { groups[key] = lines; return; }
+    const totalQty = lines.reduce((s,o)=>s+o.qty, 0);
+    if(adv.minUnits > 0 && totalQty < adv.minUnits) return;
+    const hasMatch = lines.some(line => lineMatchesAdv(line, adv));
+    if(hasMatch) groups[key] = lines;
+  });
+
   // Period label for stats
   const periodLabels = { curmonth:'This month', lastmonth:'Last month', all:'All time', custom:'Custom range' };
   const periodLabel = periodLabels[logPeriod] || '';
 
-  // Summary stats
-  const totalUnits   = rows.reduce((s,o)=>s+o.qty, 0);
-  const totalCost    = rows.reduce((s,o)=>s+(o.blankCost??0), 0);
-  const hasCost      = rows.some(o=>o.blankCost!=null);
-  const uniqueOrders = new Set(rows.map(o=>o.orderNum).filter(Boolean)).size;
+  // Stats derived from filtered groups
+  const filteredRows = Object.values(groups).flat();
+  const totalUnits   = filteredRows.reduce((s,o)=>s+o.qty, 0);
+  const totalCost    = filteredRows.reduce((s,o)=>s+(o.blankCost??0), 0);
+  const hasCost      = filteredRows.some(o=>o.blankCost!=null);
+  const uniqueOrders = Object.keys(groups).length;
   document.getElementById('log-stats').innerHTML =
     `<div class="stat" style="padding:8px 14px"><div class="stat-label">Orders ${periodLabel?'· '+periodLabel:''}</div><div class="stat-val" style="font-size:17px">${uniqueOrders}</div></div>`+
-    `<div class="stat" style="padding:8px 14px"><div class="stat-label">Line items</div><div class="stat-val" style="font-size:17px">${rows.length}</div></div>`+
+    `<div class="stat" style="padding:8px 14px"><div class="stat-label">Line items</div><div class="stat-val" style="font-size:17px">${filteredRows.length}</div></div>`+
     `<div class="stat" style="padding:8px 14px"><div class="stat-label">Units pressed</div><div class="stat-val" style="font-size:17px">${totalUnits}</div></div>`+
     (hasCost?`<div class="stat" style="padding:8px 14px"><div class="stat-label">Total blank cost</div><div class="stat-val" style="font-size:17px">$${totalCost.toFixed(2)}</div></div>`:'');
 
@@ -2485,15 +2585,12 @@ function renderLog() {
     container.innerHTML = `<div class="empty">Select a date range above to filter orders.</div>`;
     return;
   }
-  if(!rows.length) { container.innerHTML=`<div class="empty">No orders found for this period.</div>`; return; }
-
-  // Group by orderNum; ungrouped lines get a unique key per entry
-  const groups = {};
-  rows.forEach(o => {
-    const key = o.orderNum || `__ungrouped_${o.id}`;
-    if(!groups[key]) groups[key] = [];
-    groups[key].push(o);
-  });
+  if(!Object.keys(groups).length) {
+    container.innerHTML = advFiltersActive(adv)
+      ? `<div class="empty">No orders match your filters.</div>`
+      : `<div class="empty">No orders found for this period.</div>`;
+    return;
+  }
 
   // Sort groups by most recent line item date
   const sortedKeys = Object.keys(groups).sort((a,b) => {
