@@ -747,9 +747,12 @@
     </div>
 
     <div id="edit-log-alert"></div>
-    <div style="display:flex;gap:8px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="saveEditLog()">Save changes</button>
-      <button class="btn" onclick="closeEditLog()">Cancel</button>
+    <div style="display:flex;gap:8px;flex-wrap:wrap;justify-content:space-between;align-items:center">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="saveEditLog()">Save changes</button>
+        <button class="btn" onclick="closeEditLog()">Cancel</button>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="deleteLogEntry()">Delete entry</button>
     </div>
   </div>
 </div>
@@ -2945,6 +2948,19 @@ function saveEditLog() {
   saveLog();
   alertEl.innerHTML = '<div class="alert alert-success">Changes saved.</div>';
   setTimeout(() => { closeEditLog(); renderLog(); updateLogFilters(); }, 800);
+}
+
+function deleteLogEntry() {
+  const id    = parseInt(document.getElementById('edit-log-overlay').dataset.editId);
+  const entry = orderLog.find(o => o.id === id);
+  if(!entry) return;
+  const label = `${entry.brand}${entry.style?' '+entry.style:''} ${entry.color} ${entry.size} ×${entry.qty}${entry.orderNum?' (Order #'+entry.orderNum+')':''}`;
+  if(!confirm(`Delete this order entry?\n\n${label}\n\nThis cannot be undone.`)) return;
+  orderLog = orderLog.filter(o => o.id !== id);
+  saveLog();
+  closeEditLog();
+  updateLogFilters();
+  renderLog();
 }
 
 function clearLog() {
