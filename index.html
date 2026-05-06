@@ -238,6 +238,22 @@
     @media (max-width: 600px) { .rpt-two-col { grid-template-columns: 1fr; } }
     .rpt-empty { color: var(--text3); font-size: 13px; padding: 1rem 0; }
 
+    /* INVENTORY PIVOT GRIDS */
+    .pivot-wrap { overflow-x:auto; border-radius:var(--radius-lg); border:0.5px solid var(--border); background:var(--bg); margin-bottom:1.5rem; }
+    .pivot-wrap table { width:100%; border-collapse:collapse; font-size:13px; }
+    .pivot-wrap th { text-align:center; padding:8px 10px; font-size:11px; color:var(--text2); font-weight:600; border-bottom:0.5px solid var(--border); background:var(--bg2); white-space:nowrap; }
+    .pivot-wrap th.row-header { text-align:left; min-width:140px; }
+    .pivot-wrap td { padding:7px 10px; border-bottom:0.5px solid var(--border); text-align:center; white-space:nowrap; }
+    .pivot-wrap td.row-header { text-align:left; font-weight:500; background:var(--bg2); border-right:0.5px solid var(--border); }
+    .pivot-wrap td.row-sub { text-align:left; padding-left:20px; font-size:12px; color:var(--text2); background:var(--bg); border-right:0.5px solid var(--border); }
+    .pivot-wrap tr:last-child td { border-bottom:none; }
+    .pivot-wrap tr:hover td { background:var(--bg2); }
+    .pivot-wrap tr:hover td.row-header, .pivot-wrap tr:hover td.row-sub { background:var(--bg3); }
+    .pivot-cell-has { font-weight:600; color:var(--text); }
+    .pivot-cell-zero { color:var(--text3); }
+    .pivot-total-row td { font-weight:700; background:var(--bg2); border-top:0.5px solid var(--border); }
+    .pivot-total-col { font-weight:700; color:var(--text); border-left:0.5px solid var(--border) !important; }
+
     /* INVENTORY GROUPS */
     .inv-type-group { margin-bottom: 12px; }
     .inv-type-header { display:flex; align-items:center; gap:10px; padding:10px 14px; background:var(--bg); border:0.5px solid var(--border); border-radius:var(--radius-lg); cursor:pointer; user-select:none; }
@@ -310,14 +326,41 @@
         <div class="stat"><div class="stat-label">Low stock</div><div class="stat-val" id="stat-low">0</div></div>
       </div>
       <div id="reorder-panel" style="display:none"></div>
-      <div class="filter-row">
-        <select id="filter-type"  onchange="renderTable()"><option value="">All types</option></select>
-        <select id="filter-brand" onchange="onFilterBrandChange()"><option value="">All brands</option></select>
-        <select id="filter-style" onchange="renderTable()"><option value="">All styles</option></select>
-        <select id="filter-color" onchange="renderTable()"><option value="">All colors</option></select>
-        <select id="filter-size"  onchange="renderTable()"><option value="">All sizes</option></select>
+
+      <!-- View switcher -->
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+        <div style="display:flex;gap:0;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+          <button class="btn" id="inv-view-btn-browse" style="border:none;border-radius:0;padding:6px 14px;font-size:13px;background:var(--text);color:var(--bg)" onclick="setInvView('browse')">Browse</button>
+          <button class="btn" id="inv-view-btn-color"  style="border:none;border-radius:0;padding:6px 14px;font-size:13px;border-left:0.5px solid var(--border2)" onclick="setInvView('color')">By color</button>
+          <button class="btn" id="inv-view-btn-size"   style="border:none;border-radius:0;padding:6px 14px;font-size:13px;border-left:0.5px solid var(--border2)" onclick="setInvView('size')">By size</button>
+        </div>
+        <div id="inv-pivot-type-wrap" style="display:none;align-items:center;gap:8px">
+          <span style="font-size:12px;color:var(--text2)">Type:</span>
+          <select id="inv-pivot-type" onchange="renderCurrentInvView()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)"></select>
+        </div>
       </div>
-      <div id="inv-groups"></div>
+
+      <!-- Browse view -->
+      <div id="inv-view-browse">
+        <div class="filter-row">
+          <select id="filter-type"  onchange="renderTable()"><option value="">All types</option></select>
+          <select id="filter-brand" onchange="onFilterBrandChange()"><option value="">All brands</option></select>
+          <select id="filter-style" onchange="renderTable()"><option value="">All styles</option></select>
+          <select id="filter-color" onchange="renderTable()"><option value="">All colors</option></select>
+          <select id="filter-size"  onchange="renderTable()"><option value="">All sizes</option></select>
+        </div>
+        <div id="inv-groups"></div>
+      </div>
+
+      <!-- By color view -->
+      <div id="inv-view-color" style="display:none">
+        <div id="inv-color-grid"></div>
+      </div>
+
+      <!-- By size view -->
+      <div id="inv-view-size" style="display:none">
+        <div id="inv-size-grid"></div>
+      </div>
     </div>
 
     <!-- ── ADD STOCK ── -->
@@ -1652,7 +1695,7 @@ function showTab(t) {
     if(['inventory','add','press','log','reports'][i]===t) el.classList.add('active');
   });
   document.getElementById('tab-'+t).style.display = 'block';
-  if(t==='inventory') { updateStats(); updateFilters(); renderTable(); }
+  if(t==='inventory') { updateStats(); updateFilters(); renderCurrentInvView(); }
   if(t==='add')       { populateAddDropdowns(); if(addMode==='bulk') buildBulkGrid(); }
   if(t==='press')     { pressCart=[]; populatePressDropdowns(); }
   if(t==='log')       { updateLogFilters(); renderLog(); }
@@ -1950,6 +1993,167 @@ function removeItem(t,b,st,c,s) {
   if(!confirm(`Remove this item?\n\n${label}\n\nThis cannot be undone.`)) return;
   inventory=inventory.filter(i=>!(i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s));
   save(); renderTable(); updateStats(); updateFilters();
+}
+
+// ── INVENTORY VIEWS ────────────────────────────────────────────────
+let invView = 'browse'; // 'browse' | 'color' | 'size'
+
+function setInvView(view) {
+  invView = view;
+  ['browse','color','size'].forEach(v => {
+    document.getElementById(`inv-view-${v}`).style.display = v === view ? '' : 'none';
+    const btn = document.getElementById(`inv-view-btn-${v}`);
+    btn.style.background = v === view ? 'var(--text)' : '';
+    btn.style.color      = v === view ? 'var(--bg)'   : '';
+  });
+  const pivotWrap = document.getElementById('inv-pivot-type-wrap');
+  pivotWrap.style.display = view !== 'browse' ? 'flex' : 'none';
+  if(view !== 'browse') populatePivotTypeDropdown();
+  renderCurrentInvView();
+}
+
+function populatePivotTypeDropdown() {
+  const sel = document.getElementById('inv-pivot-type');
+  const cur = sel.value;
+  const types = [...new Set(inventory.map(i=>i.type))].sort();
+  sel.innerHTML = types.map(t=>`<option value="${t}"${t===cur?' selected':''}>${t}</option>`).join('');
+  // Default to T-shirt if available and nothing selected
+  if(!sel.value && types.includes('T-shirt')) sel.value = 'T-shirt';
+}
+
+function renderCurrentInvView() {
+  if(invView === 'browse') { renderTable(); return; }
+  if(invView === 'color')  { renderColorGrid(); return; }
+  if(invView === 'size')   { renderSizeGrid(); return; }
+}
+
+function renderColorGrid() {
+  const type  = document.getElementById('inv-pivot-type').value;
+  const items = inventory.filter(i => i.type === type);
+  const container = document.getElementById('inv-color-grid');
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size','NB','6mo','12mo','24mo','2T','3T','4T','5T'];
+
+  if(!items.length) { container.innerHTML=`<div class="empty">No ${type} inventory found.</div>`; return; }
+
+  // Get all colors and sizes present
+  const colors = [...new Set(items.map(i=>i.color))].sort();
+  const sizes  = [...new Set(items.map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
+
+  // Build lookup: color+size → total qty
+  const lookup = {};
+  items.forEach(i => {
+    const key = `${i.color}||${i.size}`;
+    lookup[key] = (lookup[key]||0) + itemTotalQty(i);
+  });
+
+  // Column totals
+  const sizeTotals = {};
+  sizes.forEach(s => {
+    sizeTotals[s] = colors.reduce((sum,c)=>sum+(lookup[`${c}||${s}`]||0), 0);
+  });
+  const grandTotal = Object.values(sizeTotals).reduce((s,v)=>s+v, 0);
+
+  let html = `<div class="pivot-wrap"><table>
+    <thead><tr>
+      <th class="row-header">Color</th>
+      ${sizes.map(s=>`<th>${s}</th>`).join('')}
+      <th class="pivot-total-col">Total</th>
+    </tr></thead><tbody>`;
+
+  colors.forEach(color => {
+    const rowTotal = sizes.reduce((sum,s)=>sum+(lookup[`${color}||${s}`]||0), 0);
+    html += `<tr>
+      <td class="row-header">${color}</td>
+      ${sizes.map(s => {
+        const qty = lookup[`${color}||${s}`]||0;
+        return `<td class="${qty>0?'pivot-cell-has':'pivot-cell-zero'}">${qty>0?qty:'—'}</td>`;
+      }).join('')}
+      <td class="pivot-total-col">${rowTotal||'—'}</td>
+    </tr>`;
+  });
+
+  // Totals row
+  html += `<tr class="pivot-total-row">
+    <td class="row-header">Total</td>
+    ${sizes.map(s=>`<td>${sizeTotals[s]||'—'}</td>`).join('')}
+    <td class="pivot-total-col">${grandTotal}</td>
+  </tr>`;
+
+  html += `</tbody></table></div>`;
+  html += `<p style="font-size:12px;color:var(--text3)">Showing all ${type} inventory · ${colors.length} color${colors.length!==1?'s':''} · ${grandTotal} units total</p>`;
+  container.innerHTML = html;
+}
+
+function renderSizeGrid() {
+  const type  = document.getElementById('inv-pivot-type').value;
+  const items = inventory.filter(i => i.type === type);
+  const container = document.getElementById('inv-size-grid');
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size','NB','6mo','12mo','24mo','2T','3T','4T','5T'];
+
+  if(!items.length) { container.innerHTML=`<div class="empty">No ${type} inventory found.</div>`; return; }
+
+  const sizes = [...new Set(items.map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
+
+  // Group by brand → style
+  const brandStyleGroups = {};
+  items.forEach(i => {
+    if(!brandStyleGroups[i.brand]) brandStyleGroups[i.brand] = {};
+    const sk = i.style || '(No style)';
+    if(!brandStyleGroups[i.brand][sk]) brandStyleGroups[i.brand][sk] = {};
+    const key = i.size;
+    brandStyleGroups[i.brand][sk][key] = (brandStyleGroups[i.brand][sk][key]||0) + itemTotalQty(i);
+  });
+
+  // Column totals
+  const sizeTotals = {};
+  sizes.forEach(s => { sizeTotals[s] = items.filter(i=>i.size===s).reduce((sum,i)=>sum+itemTotalQty(i),0); });
+  const grandTotal = Object.values(sizeTotals).reduce((s,v)=>s+v, 0);
+
+  let html = `<div class="pivot-wrap"><table>
+    <thead><tr>
+      <th class="row-header">Brand / Style</th>
+      ${sizes.map(s=>`<th>${s}</th>`).join('')}
+      <th class="pivot-total-col">Total</th>
+    </tr></thead><tbody>`;
+
+  Object.keys(brandStyleGroups).sort().forEach(brand => {
+    const styles = brandStyleGroups[brand];
+    const brandTotals = {};
+    sizes.forEach(s => { brandTotals[s] = Object.values(styles).reduce((sum,st)=>sum+(st[s]||0),0); });
+    const brandTotal = Object.values(brandTotals).reduce((s,v)=>s+v,0);
+
+    // Brand row
+    html += `<tr>
+      <td class="row-header">${brand}</td>
+      ${sizes.map(s=>`<td class="${brandTotals[s]>0?'pivot-cell-has':'pivot-cell-zero'}">${brandTotals[s]||'—'}</td>`).join('')}
+      <td class="pivot-total-col">${brandTotal||'—'}</td>
+    </tr>`;
+
+    // Style sub-rows
+    Object.keys(styles).sort().forEach(style => {
+      const styleData = styles[style];
+      const styleTotal = sizes.reduce((sum,s)=>sum+(styleData[s]||0),0);
+      html += `<tr>
+        <td class="row-sub"><span class="style-tag">${style}</span></td>
+        ${sizes.map(s => {
+          const qty = styleData[s]||0;
+          return `<td class="${qty>0?'pivot-cell-has':'pivot-cell-zero'}" style="font-size:12px">${qty>0?qty:'—'}</td>`;
+        }).join('')}
+        <td class="pivot-total-col" style="font-size:12px">${styleTotal||'—'}</td>
+      </tr>`;
+    });
+  });
+
+  // Totals row
+  html += `<tr class="pivot-total-row">
+    <td class="row-header">Total</td>
+    ${sizes.map(s=>`<td>${sizeTotals[s]||'—'}</td>`).join('')}
+    <td class="pivot-total-col">${grandTotal}</td>
+  </tr>`;
+
+  html += `</tbody></table></div>`;
+  html += `<p style="font-size:12px;color:var(--text3)">Showing all ${type} inventory · ${Object.keys(brandStyleGroups).length} brand${Object.keys(brandStyleGroups).length!==1?'s':''} · ${grandTotal} units total</p>`;
+  container.innerHTML = html;
 }
 
 // ── ADD STOCK ──────────────────────────────────────────────────────
