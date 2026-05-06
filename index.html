@@ -2031,51 +2031,65 @@ function renderColorGrid() {
   const type  = document.getElementById('inv-pivot-type').value;
   const items = inventory.filter(i => i.type === type);
   const container = document.getElementById('inv-color-grid');
-  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size','NB','6mo','12mo','24mo','2T','3T','4T','5T'];
 
   if(!items.length) { container.innerHTML=`<div class="empty">No ${type} inventory found.</div>`; return; }
 
-  // Get all colors and sizes present
+  // Get all colors present, sorted
   const colors = [...new Set(items.map(i=>i.color))].sort();
-  const sizes  = [...new Set(items.map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
 
-  // Build lookup: color+size → total qty
-  const lookup = {};
+  // Group by brand → style, lookup by style+color → total qty
+  const brandStyleGroups = {};
   items.forEach(i => {
-    const key = `${i.color}||${i.size}`;
-    lookup[key] = (lookup[key]||0) + itemTotalQty(i);
+    if(!brandStyleGroups[i.brand]) brandStyleGroups[i.brand] = {};
+    const sk = i.style || '(No style)';
+    if(!brandStyleGroups[i.brand][sk]) brandStyleGroups[i.brand][sk] = {};
+    brandStyleGroups[i.brand][sk][i.color] = (brandStyleGroups[i.brand][sk][i.color]||0) + itemTotalQty(i);
   });
 
-  // Column totals
-  const sizeTotals = {};
-  sizes.forEach(s => {
-    sizeTotals[s] = colors.reduce((sum,c)=>sum+(lookup[`${c}||${s}`]||0), 0);
-  });
-  const grandTotal = Object.values(sizeTotals).reduce((s,v)=>s+v, 0);
+  // Column totals per color
+  const colorTotals = {};
+  colors.forEach(c => { colorTotals[c] = items.filter(i=>i.color===c).reduce((s,i)=>s+itemTotalQty(i),0); });
+  const grandTotal = Object.values(colorTotals).reduce((s,v)=>s+v, 0);
 
   let html = `<div class="pivot-wrap"><table>
     <thead><tr>
-      <th class="row-header">Color</th>
-      ${sizes.map(s=>`<th>${s}</th>`).join('')}
+      <th class="row-header">Brand / Style</th>
+      ${colors.map(c=>`<th>${c}</th>`).join('')}
       <th class="pivot-total-col">Total</th>
     </tr></thead><tbody>`;
 
-  colors.forEach(color => {
-    const rowTotal = sizes.reduce((sum,s)=>sum+(lookup[`${color}||${s}`]||0), 0);
+  Object.keys(brandStyleGroups).sort().forEach(brand => {
+    const styles = brandStyleGroups[brand];
+    const brandTotals = {};
+    colors.forEach(c => { brandTotals[c] = Object.values(styles).reduce((sum,st)=>sum+(st[c]||0),0); });
+    const brandTotal = Object.values(brandTotals).reduce((s,v)=>s+v, 0);
+
+    // Brand row
     html += `<tr>
-      <td class="row-header">${color}</td>
-      ${sizes.map(s => {
-        const qty = lookup[`${color}||${s}`]||0;
-        return `<td class="${qty>0?'pivot-cell-has':'pivot-cell-zero'}">${qty>0?qty:'—'}</td>`;
-      }).join('')}
-      <td class="pivot-total-col">${rowTotal||'—'}</td>
+      <td class="row-header">${brand}</td>
+      ${colors.map(c=>`<td class="${brandTotals[c]>0?'pivot-cell-has':'pivot-cell-zero'}">${brandTotals[c]||'—'}</td>`).join('')}
+      <td class="pivot-total-col">${brandTotal||'—'}</td>
     </tr>`;
+
+    // Style sub-rows
+    Object.keys(styles).sort().forEach(style => {
+      const styleData = styles[style];
+      const styleTotal = colors.reduce((sum,c)=>sum+(styleData[c]||0), 0);
+      html += `<tr>
+        <td class="row-sub"><span class="style-tag">${style}</span></td>
+        ${colors.map(c => {
+          const qty = styleData[c]||0;
+          return `<td class="${qty>0?'pivot-cell-has':'pivot-cell-zero'}" style="font-size:12px">${qty>0?qty:'—'}</td>`;
+        }).join('')}
+        <td class="pivot-total-col" style="font-size:12px">${styleTotal||'—'}</td>
+      </tr>`;
+    });
   });
 
   // Totals row
   html += `<tr class="pivot-total-row">
     <td class="row-header">Total</td>
-    ${sizes.map(s=>`<td>${sizeTotals[s]||'—'}</td>`).join('')}
+    ${colors.map(c=>`<td>${colorTotals[c]||'—'}</td>`).join('')}
     <td class="pivot-total-col">${grandTotal}</td>
   </tr>`;
 
