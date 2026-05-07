@@ -146,6 +146,15 @@
     .qty-val { min-width: 28px; text-align: center; font-size: 13px; }
     .cost-preview { background: var(--bg2); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; font-size: 13px; }
 
+    /* SLIDE-OUT PANELS */
+    .slideout-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:150; }
+    .slideout-overlay.open { display:block; }
+    .slideout-panel { position:fixed; top:0; right:0; height:100%; width:min(520px, 100vw); background:var(--bg); border-left:0.5px solid var(--border); z-index:151; display:flex; flex-direction:column; transform:translateX(100%); transition:transform .25s cubic-bezier(.4,0,.2,1); overflow:hidden; }
+    .slideout-overlay.open .slideout-panel { transform:translateX(0); }
+    .slideout-header { display:flex; align-items:center; justify-content:space-between; padding:1rem 1.25rem; border-bottom:0.5px solid var(--border); flex-shrink:0; }
+    .slideout-header h2 { font-size:16px; font-weight:600; margin:0; }
+    .slideout-body { flex:1; overflow-y:auto; padding:1.25rem; }
+
     /* SETTINGS MODAL */
     #settings-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.5); z-index: 200; align-items: flex-start; justify-content: center; padding: 1rem; overflow-y: auto; }
     #settings-overlay.open { display: flex; }
@@ -311,8 +320,6 @@
   <div id="main">
     <div class="tabs">
       <button class="tab active" onclick="showTab('inventory')">Inventory</button>
-      <button class="tab" onclick="showTab('add')">Add stock</button>
-      <button class="tab" onclick="showTab('press')">Press order</button>
       <button class="tab" onclick="showTab('log')">Order log</button>
       <button class="tab" onclick="showTab('reports')">Reports</button>
     </div>
@@ -334,9 +341,12 @@
           <button class="btn" id="inv-view-btn-color"  style="border:none;border-radius:0;padding:6px 14px;font-size:13px;border-left:0.5px solid var(--border2)" onclick="setInvView('color')">By color</button>
           <button class="btn" id="inv-view-btn-size"   style="border:none;border-radius:0;padding:6px 14px;font-size:13px;border-left:0.5px solid var(--border2)" onclick="setInvView('size')">By size</button>
         </div>
-        <div id="inv-pivot-type-wrap" style="display:none;align-items:center;gap:8px">
-          <span style="font-size:12px;color:var(--text2)">Type:</span>
-          <select id="inv-pivot-type" onchange="renderCurrentInvView()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)"></select>
+        <div style="display:flex;align-items:center;gap:8px">
+          <div id="inv-pivot-type-wrap" style="display:none;align-items:center;gap:8px">
+            <span style="font-size:12px;color:var(--text2)">Type:</span>
+            <select id="inv-pivot-type" onchange="renderCurrentInvView()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)"></select>
+          </div>
+          <button class="btn btn-primary" onclick="openSlideout('add')">+ Add stock</button>
         </div>
       </div>
 
@@ -363,259 +373,252 @@
       </div>
     </div>
 
-    <!-- ── ADD STOCK ── -->
-    <div id="tab-add" style="display:none">
-      <div class="card">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
-          <div class="section-title" style="margin:0">Add or update stock</div>
-          <div style="display:flex;gap:0;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
-            <button id="mode-single-btn" class="btn" style="border:none;border-radius:0;padding:7px 14px;font-size:13px;background:var(--text);color:var(--bg)" onclick="setAddMode('single')">Single entry</button>
-            <button id="mode-bulk-btn"   class="btn" style="border:none;border-radius:0;padding:7px 14px;font-size:13px;border-left:0.5px solid var(--border2)" onclick="setAddMode('bulk')">Size run (bulk)</button>
-            <button id="mode-csv-btn"    class="btn" style="border:none;border-radius:0;padding:7px 14px;font-size:13px;border-left:0.5px solid var(--border2)" onclick="setAddMode('csv')">CSV import</button>
+    <!-- ── ADD STOCK SLIDE-OUT ── -->
+    <div class="slideout-overlay" id="slideout-add" onclick="closeSlideoutIfOutside(event, 'add')">
+      <div class="slideout-panel">
+        <div class="slideout-header">
+          <h2>Add stock</h2>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="display:flex;gap:0;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden">
+              <button id="mode-single-btn" class="btn" style="border:none;border-radius:0;padding:5px 12px;font-size:12px;background:var(--text);color:var(--bg)" onclick="setAddMode('single')">Single</button>
+              <button id="mode-bulk-btn"   class="btn" style="border:none;border-radius:0;padding:5px 12px;font-size:12px;border-left:0.5px solid var(--border2)" onclick="setAddMode('bulk')">Size run</button>
+              <button id="mode-csv-btn"    class="btn" style="border:none;border-radius:0;padding:5px 12px;font-size:12px;border-left:0.5px solid var(--border2)" onclick="setAddMode('csv')">CSV</button>
+            </div>
+            <button class="btn-icon" onclick="closeSlideout('add')">✕</button>
           </div>
         </div>
-        <div id="add-alert"></div>
-
-        <!-- Shared garment selectors (hidden in CSV mode) -->
-        <div id="add-shared-selectors">
-        <p class="sub-label">Garment details</p>
-        <div class="g4" style="margin-bottom:12px">
-          <div class="field">
-            <span class="label">Stock type</span>
-            <select id="add-type" onchange="handleCombo('type')"></select>
-            <div class="new-entry-row" id="new-type-row" style="display:none">
-              <input type="text" id="new-type-input" placeholder="e.g. Hoodie">
-              <button class="btn" onclick="confirmNew('type')">Add</button>
-              <button class="btn" onclick="cancelNew('type')">✕</button>
-            </div>
-          </div>
-          <div class="field">
-            <span class="label">Brand</span>
-            <select id="add-brand"></select>
-            <div class="new-entry-row" id="new-brand-row" style="display:none">
-              <input type="text" id="new-brand-input" placeholder="e.g. Next Level">
-              <button class="btn" onclick="confirmNew('brand')">Add</button>
-              <button class="btn" onclick="cancelNew('brand')">✕</button>
-            </div>
-          </div>
-          <div class="field">
-            <span class="label">Style / SKU</span>
-            <select id="add-style" onchange="handleCombo('style')" disabled></select>
-            <div class="new-entry-row" id="new-style-row" style="display:none">
-              <input type="text" id="new-style-input" placeholder="e.g. 3001C">
-              <button class="btn" onclick="confirmNew('style')">Add</button>
-              <button class="btn" onclick="cancelNew('style')">✕</button>
-            </div>
-            <span class="hint" id="style-hint">Select a brand first</span>
-          </div>
-          <div class="field">
-            <span class="label">Color</span>
-            <select id="add-color" onchange="handleCombo('color')"></select>
-            <div class="new-entry-row" id="new-color-row" style="display:none">
-              <input type="text" id="new-color-input" placeholder="e.g. Heather Navy">
-              <button class="btn" onclick="confirmNew('color')">Add</button>
-              <button class="btn" onclick="cancelNew('color')">✕</button>
-            </div>
-          </div>
-        </div>
-        <div class="g2" style="margin-bottom:12px;max-width:480px">
-          <div class="field">
-            <span class="label">Supplier <span style="font-weight:400;color:var(--text3)">(optional)</span></span>
-            <select id="add-supplier" onchange="handleCombo('supplier')"></select>
-            <div class="new-entry-row" id="new-supplier-row" style="display:none">
-              <input type="text" id="new-supplier-input" placeholder="e.g. S&S Activewear">
-              <button class="btn" onclick="confirmNew('supplier')">Add</button>
-              <button class="btn" onclick="cancelNew('supplier')">✕</button>
-            </div>
-          </div>
-          <div class="field">
-            <span class="label">Supplier order # <span style="font-weight:400;color:var(--text3)">(optional)</span></span>
-            <input type="text" id="add-supplier-order" placeholder="e.g. INV-8842">
-          </div>
-        </div>
-
-        <!-- SINGLE ENTRY MODE -->
-        </div><!-- /add-shared-selectors -->
-
-        <div id="add-mode-single">
-          <div class="g3" style="margin-bottom:16px">
-            <div class="field">
-              <span class="label">Size</span>
-              <select id="add-size">
-                <option value="">Select size</option>
-                <option>XS</option><option>S</option><option>M</option><option>L</option>
-                <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>One size</option>
-              </select>
-            </div>
-            <div class="field">
-              <span class="label">Quantity to add</span>
-              <input type="number" id="add-qty" min="1" value="12">
-            </div>
-            <div class="field">
-              <span class="label">Cost per blank ($)</span>
-              <div class="input-prefix">
-                <span>$</span>
-                <input type="number" id="add-cost" min="0" step="0.01" placeholder="3.50">
+        <div class="slideout-body">
+          <div id="add-alert"></div>
+          <div id="add-shared-selectors">
+            <p class="sub-label">Garment details</p>
+            <div class="g4" style="margin-bottom:12px">
+              <div class="field">
+                <span class="label">Stock type</span>
+                <select id="add-type" onchange="handleCombo('type')"></select>
+                <div class="new-entry-row" id="new-type-row" style="display:none">
+                  <input type="text" id="new-type-input" placeholder="e.g. Hoodie">
+                  <button class="btn" onclick="confirmNew('type')">Add</button>
+                  <button class="btn" onclick="cancelNew('type')">✕</button>
+                </div>
+              </div>
+              <div class="field">
+                <span class="label">Brand</span>
+                <select id="add-brand"></select>
+                <div class="new-entry-row" id="new-brand-row" style="display:none">
+                  <input type="text" id="new-brand-input" placeholder="e.g. Next Level">
+                  <button class="btn" onclick="confirmNew('brand')">Add</button>
+                  <button class="btn" onclick="cancelNew('brand')">✕</button>
+                </div>
+              </div>
+              <div class="field">
+                <span class="label">Style / SKU</span>
+                <select id="add-style" onchange="handleCombo('style')" disabled></select>
+                <div class="new-entry-row" id="new-style-row" style="display:none">
+                  <input type="text" id="new-style-input" placeholder="e.g. 3001C">
+                  <button class="btn" onclick="confirmNew('style')">Add</button>
+                  <button class="btn" onclick="cancelNew('style')">✕</button>
+                </div>
+                <span class="hint" id="style-hint">Select a brand first</span>
+              </div>
+              <div class="field">
+                <span class="label">Color</span>
+                <select id="add-color" onchange="handleCombo('color')"></select>
+                <div class="new-entry-row" id="new-color-row" style="display:none">
+                  <input type="text" id="new-color-input" placeholder="e.g. Heather Navy">
+                  <button class="btn" onclick="confirmNew('color')">Add</button>
+                  <button class="btn" onclick="cancelNew('color')">✕</button>
+                </div>
               </div>
             </div>
-          </div>
-          <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Style is optional. Adding to an existing SKU adds qty and updates cost if provided.</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary" onclick="addStock()">Add to inventory</button>
-            <button class="btn" onclick="clearAddForm()">Clear</button>
-          </div>
-        </div>
+            <div class="g2" style="margin-bottom:12px">
+              <div class="field">
+                <span class="label">Supplier <span style="font-weight:400;color:var(--text3)">(optional)</span></span>
+                <select id="add-supplier" onchange="handleCombo('supplier')"></select>
+                <div class="new-entry-row" id="new-supplier-row" style="display:none">
+                  <input type="text" id="new-supplier-input" placeholder="e.g. S&amp;S Activewear">
+                  <button class="btn" onclick="confirmNew('supplier')">Add</button>
+                  <button class="btn" onclick="cancelNew('supplier')">✕</button>
+                </div>
+              </div>
+              <div class="field">
+                <span class="label">Supplier order # <span style="font-weight:400;color:var(--text3)">(optional)</span></span>
+                <input type="text" id="add-supplier-order" placeholder="e.g. INV-8842">
+              </div>
+            </div>
+          </div><!-- /add-shared-selectors -->
 
-        <!-- BULK / SIZE RUN MODE -->
-        <div id="add-mode-bulk" style="display:none">
-          <hr class="divider" style="margin-top:0">
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
-            <p class="sub-label" style="margin:0">Size run — qty &amp; cost per size</p>
-            <div style="display:flex;gap:6px;align-items:center">
-              <span style="font-size:12px;color:var(--text2)">Fill all sizes with:</span>
-              <input type="number" id="bulk-fill-val" min="1" placeholder="12" style="width:60px;padding:5px 7px;font-size:13px">
-              <button class="btn btn-sm" onclick="bulkFillAll()">Fill</button>
+          <!-- SINGLE ENTRY MODE -->
+          <div id="add-mode-single">
+            <div class="g3" style="margin-bottom:16px">
+              <div class="field">
+                <span class="label">Size</span>
+                <select id="add-size">
+                  <option value="">Select size</option>
+                  <option>XS</option><option>S</option><option>M</option><option>L</option>
+                  <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>One size</option>
+                </select>
+              </div>
+              <div class="field">
+                <span class="label">Quantity to add</span>
+                <input type="number" id="add-qty" min="1" value="12">
+              </div>
+              <div class="field">
+                <span class="label">Cost per blank ($)</span>
+                <div class="input-prefix">
+                  <span>$</span>
+                  <input type="number" id="add-cost" min="0" step="0.01" placeholder="3.50">
+                </div>
+              </div>
+            </div>
+            <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Style is optional. Each addition creates a new cost lot.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="addStock()">Add to inventory</button>
+              <button class="btn" onclick="clearAddForm()">Clear</button>
             </div>
           </div>
-          <div id="bulk-size-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-bottom:10px"></div>
-          <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
-            <span style="font-size:12px;color:var(--text2)">Fill all costs with:</span>
-            <div class="input-prefix" style="width:auto">
-              <span>$</span>
-              <input type="number" id="bulk-fill-cost" min="0" step="0.01" placeholder="3.50" style="width:70px">
+
+          <!-- BULK / SIZE RUN MODE -->
+          <div id="add-mode-bulk" style="display:none">
+            <hr class="divider" style="margin-top:0">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;flex-wrap:wrap;gap:8px">
+              <p class="sub-label" style="margin:0">Size run — qty &amp; cost per size</p>
+              <div style="display:flex;gap:6px;align-items:center">
+                <span style="font-size:12px;color:var(--text2)">Fill all:</span>
+                <input type="number" id="bulk-fill-val" min="1" placeholder="12" style="width:60px;padding:5px 7px;font-size:13px">
+                <button class="btn btn-sm" onclick="bulkFillAll()">Fill</button>
+              </div>
             </div>
-            <button class="btn btn-sm" onclick="bulkFillAllCosts()">Fill costs</button>
-          </div>
-          <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Leave qty blank to skip a size. Cost per size is optional. Adds to existing qty if the SKU already exists.</p>
-          <div style="display:flex;gap:8px;flex-wrap:wrap">
-            <button class="btn btn-primary" onclick="addBulkStock()">Add size run to inventory</button>
-            <button class="btn" onclick="clearAddForm()">Clear</button>
-          </div>
-        </div>
-
-        <!-- CSV IMPORT MODE -->
-        <div id="add-mode-csv" style="display:none">
-          <hr class="divider" style="margin-top:0">
-          <p class="sub-label">CSV import</p>
-          <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Download the template, fill it in, then upload it here. Any new brands, styles, colors, or types will be added to your catalog automatically.</p>
-
-          <div style="background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
-            <strong style="color:var(--text);display:block;margin-bottom:6px">Required columns:</strong>
-            type, brand, style, color, size, qty, cost<br>
-            <span style="color:var(--text3);margin-top:4px;display:block">size must be one of: XS, S, M, L, XL, 2XL, 3XL, 4XL, One size &nbsp;·&nbsp; cost is per blank in dollars &nbsp;·&nbsp; date_added format: YYYY-MM-DD (leave blank to use today) &nbsp;·&nbsp; supplier and supplier_order are optional &nbsp;·&nbsp; style is optional</span>
-          </div>
-
-          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
-            <button class="btn" onclick="downloadCSVTemplate()">⬇ Download template</button>
-            <label class="btn" style="cursor:pointer">
-              ⬆ Choose CSV file
-              <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="handleCSVFile(event)">
-            </label>
-          </div>
-
-          <div id="csv-alert"></div>
-          <div id="csv-preview"></div>
-        </div>
-
-      </div>
-    </div>
-
-    <!-- ── PRESS ORDER ── -->
-    <div id="tab-press" style="display:none">
-      <div class="card">
-        <div class="section-title">Log a press order</div>
-        <div id="press-alert"></div>
-
-        <!-- Order header -->
-        <p class="sub-label">Order details</p>
-        <div class="g4" style="margin-bottom:12px">
-          <div class="field">
-            <span class="label">Date</span>
-            <input type="date" id="press-date" style="padding:9px 11px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
-          </div>
-          <div class="field">
-            <span class="label">Shop name</span>
-            <select id="press-shop" onchange="handleCombo('shop')"></select>
-            <div class="new-entry-row" id="new-shop-row" style="display:none">
-              <input type="text" id="new-shop-input" placeholder="New shop name">
-              <button class="btn" onclick="confirmNew('shop')">Add</button>
-              <button class="btn" onclick="cancelNew('shop')">✕</button>
+            <div id="bulk-size-grid" style="display:grid;grid-template-columns:repeat(auto-fill,minmax(110px,1fr));gap:10px;margin-bottom:10px"></div>
+            <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;margin-bottom:16px">
+              <span style="font-size:12px;color:var(--text2)">Fill all costs:</span>
+              <div class="input-prefix" style="width:auto">
+                <span>$</span>
+                <input type="number" id="bulk-fill-cost" min="0" step="0.01" placeholder="3.50" style="width:70px">
+              </div>
+              <button class="btn btn-sm" onclick="bulkFillAllCosts()">Fill costs</button>
+            </div>
+            <p style="font-size:12px;color:var(--text2);margin-bottom:14px">Leave qty blank to skip a size.</p>
+            <div style="display:flex;gap:8px;flex-wrap:wrap">
+              <button class="btn btn-primary" onclick="addBulkStock()">Add size run to inventory</button>
+              <button class="btn" onclick="clearAddForm()">Clear</button>
             </div>
           </div>
-          <div class="field">
-            <span class="label">Order # <span style="color:var(--danger-text)">*</span></span>
-            <input type="text" id="press-order-num" placeholder="e.g. 1042, ORD-209">
-          </div>
-          <div class="field">
-            <span class="label">Note</span>
-            <input type="text" id="press-note" placeholder="e.g. Rush, front only, 2-color">
-          </div>
-        </div>
 
-        <hr class="divider">
+          <!-- CSV IMPORT MODE -->
+          <div id="add-mode-csv" style="display:none">
+            <hr class="divider" style="margin-top:0">
+            <p class="sub-label">CSV import</p>
+            <p style="font-size:13px;color:var(--text2);margin-bottom:12px">Download the template, fill it in, then upload it here.</p>
+            <div style="background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
+              <strong style="color:var(--text);display:block;margin-bottom:6px">Required columns:</strong>
+              type, brand, style, color, size, qty, cost<br>
+              <span style="color:var(--text3);margin-top:4px;display:block">size: XS S M L XL 2XL 3XL 4XL One size &nbsp;·&nbsp; date_added: YYYY-MM-DD &nbsp;·&nbsp; supplier and supplier_order optional</span>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+              <button class="btn" onclick="downloadCSVTemplate()">⬇ Download template</button>
+              <label class="btn" style="cursor:pointer">
+                ⬆ Choose CSV file
+                <input type="file" id="csv-file-input" accept=".csv" style="display:none" onchange="handleCSVFile(event)">
+              </label>
+            </div>
+            <div id="csv-alert"></div>
+            <div id="csv-preview"></div>
+          </div>
 
-        <!-- Order lines cart -->
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
-          <p class="sub-label" style="margin:0">Order lines</p>
-          <span id="press-line-count" style="font-size:12px;color:var(--text2)">No items added yet</span>
-        </div>
-        <div id="press-cart" style="margin-bottom:12px"></div>
+        </div><!-- /slideout-body -->
+      </div><!-- /slideout-panel -->
+    </div><!-- /slideout-add -->
 
-        <hr class="divider">
+    <!-- ── PRESS ORDER SLIDE-OUT ── -->
+    <div class="slideout-overlay" id="slideout-press" onclick="closeSlideoutIfOutside(event, 'press')">
+      <div class="slideout-panel">
+        <div class="slideout-header">
+          <h2>New press order</h2>
+          <button class="btn-icon" onclick="closeSlideout('press')">✕</button>
+        </div>
+        <div class="slideout-body">
+          <div id="press-alert"></div>
+          <p class="sub-label">Order details</p>
+          <div class="g4" style="margin-bottom:12px">
+            <div class="field">
+              <span class="label">Date</span>
+              <input type="date" id="press-date" style="padding:9px 11px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+            </div>
+            <div class="field">
+              <span class="label">Shop name</span>
+              <select id="press-shop" onchange="handleCombo('shop')"></select>
+              <div class="new-entry-row" id="new-shop-row" style="display:none">
+                <input type="text" id="new-shop-input" placeholder="New shop name">
+                <button class="btn" onclick="confirmNew('shop')">Add</button>
+                <button class="btn" onclick="cancelNew('shop')">✕</button>
+              </div>
+            </div>
+            <div class="field">
+              <span class="label">Order # <span style="color:var(--danger-text)">*</span></span>
+              <input type="text" id="press-order-num" placeholder="e.g. 1042, ORD-209">
+            </div>
+            <div class="field">
+              <span class="label">Note</span>
+              <input type="text" id="press-note" placeholder="e.g. Rush, front only">
+            </div>
+          </div>
+          <hr class="divider">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+            <p class="sub-label" style="margin:0">Order lines</p>
+            <span id="press-line-count" style="font-size:12px;color:var(--text2)">No items added yet</span>
+          </div>
+          <div id="press-cart" style="margin-bottom:12px"></div>
+          <hr class="divider">
+          <p class="sub-label">Add a garment</p>
+          <div class="g4" style="margin-bottom:12px">
+            <div class="field">
+              <span class="label">Stock type</span>
+              <select id="press-type" onchange="updatePressType()"><option value="">Select type</option></select>
+            </div>
+            <div class="field">
+              <span class="label">Brand</span>
+              <select id="press-brand" onchange="updatePressBrand()"><option value="">Select brand</option></select>
+            </div>
+            <div class="field">
+              <span class="label">Style / SKU</span>
+              <select id="press-style" onchange="updatePressStyle()" disabled><option value="">Select style</option></select>
+              <span class="hint" id="press-style-hint">Select a brand first</span>
+            </div>
+            <div class="field">
+              <span class="label">Color</span>
+              <select id="press-color" onchange="updatePressColor()"><option value="">Select color</option></select>
+            </div>
+          </div>
+          <div class="g2" style="margin-bottom:12px;max-width:380px">
+            <div class="field">
+              <span class="label">Size</span>
+              <select id="press-size" onchange="showPressCost()"><option value="">Select size</option></select>
+            </div>
+            <div class="field">
+              <span class="label">Quantity</span>
+              <input type="number" id="press-qty" min="1" value="1" oninput="showPressCost()">
+            </div>
+          </div>
+          <div id="press-cost-preview" class="cost-preview" style="display:none;max-width:380px;margin-bottom:12px">
+            <span style="color:var(--text2)">Blank cost for this line:</span>
+            <span id="press-cost-val" style="font-weight:600;margin-left:8px"></span>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px">
+            <button class="btn btn-primary" onclick="addPressLine()">+ Add to order</button>
+          </div>
+          <hr class="divider">
+          <div id="press-summary" style="display:none;background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px">
+            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
+              <span style="color:var(--text2)">Total blank cost:</span>
+              <span id="press-total-cost" style="font-weight:700;font-size:15px"></span>
+            </div>
+          </div>
+          <button class="btn btn-primary" id="press-submit-btn" style="display:none" onclick="submitPressOrder()">Submit order &amp; deduct inventory</button>
+        </div><!-- /slideout-body -->
+      </div><!-- /slideout-panel -->
+    </div><!-- /slideout-press -->
 
-        <!-- Blank selector -->
-        <p class="sub-label">Add a garment</p>
-        <div class="g4" style="margin-bottom:12px">
-          <div class="field">
-            <span class="label">Stock type</span>
-            <select id="press-type" onchange="updatePressType()"><option value="">Select type</option></select>
-          </div>
-          <div class="field">
-            <span class="label">Brand</span>
-            <select id="press-brand" onchange="updatePressBrand()"><option value="">Select brand</option></select>
-          </div>
-          <div class="field">
-            <span class="label">Style / SKU</span>
-            <select id="press-style" onchange="updatePressStyle()" disabled><option value="">Select style</option></select>
-            <span class="hint" id="press-style-hint">Select a brand first</span>
-          </div>
-          <div class="field">
-            <span class="label">Color</span>
-            <select id="press-color" onchange="updatePressColor()"><option value="">Select color</option></select>
-          </div>
-        </div>
-        <div class="g2" style="margin-bottom:12px;max-width:380px">
-          <div class="field">
-            <span class="label">Size</span>
-            <select id="press-size" onchange="showPressCost()"><option value="">Select size</option></select>
-          </div>
-          <div class="field">
-            <span class="label">Quantity</span>
-            <input type="number" id="press-qty" min="1" value="1" oninput="showPressCost()">
-          </div>
-        </div>
-        <div id="press-cost-preview" class="cost-preview" style="display:none;max-width:380px">
-          <span style="color:var(--text2)">Blank cost for this line:</span>
-          <span id="press-cost-val" style="font-weight:600;margin-left:8px"></span>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px">
-          <button class="btn btn-primary" onclick="addPressLine()">+ Add to order</button>
-        </div>
-
-        <hr class="divider">
-
-        <!-- Order summary + submit -->
-        <div id="press-summary" style="display:none;background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:13px">
-          <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">
-            <span style="color:var(--text2)">Total blank cost:</span>
-            <span id="press-total-cost" style="font-weight:700;font-size:15px"></span>
-          </div>
-        </div>
-        <button class="btn btn-primary" id="press-submit-btn" style="display:none" onclick="submitPressOrder()">Submit order &amp; deduct inventory</button>
-      </div>
-    </div>
-
-    <!-- ── ORDER LOG ── -->
+        <!-- ── ORDER LOG ── -->
     <div id="tab-log" style="display:none">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.75rem;flex-wrap:wrap;gap:8px">
         <div class="filter-row" style="margin-bottom:0;flex:1;min-width:0">
@@ -624,6 +627,7 @@
         </div>
         <div style="display:flex;gap:8px;align-items:center">
           <button class="btn btn-sm" onclick="toggleLogSort()" id="log-sort-btn" title="Toggle date sort">Date ▼</button>
+          <button class="btn btn-primary" onclick="openSlideout('press')">+ New press order</button>
         </div>
       </div>
       <!-- Date filter row -->
@@ -1690,17 +1694,35 @@ function populateAddDropdowns() {
   document.getElementById('style-hint').textContent = 'Select a brand first';
 }
 
+// ── SLIDE-OUT PANELS ───────────────────────────────────────────────
+function openSlideout(which) {
+  document.getElementById(`slideout-${which}`).classList.add('open');
+  if(which === 'add') {
+    populateAddDropdowns();
+    if(addMode === 'bulk') buildBulkGrid();
+  }
+  if(which === 'press') {
+    pressCart = [];
+    populatePressDropdowns();
+    renderPressCart();
+  }
+}
+function closeSlideout(which) {
+  document.getElementById(`slideout-${which}`).classList.remove('open');
+}
+function closeSlideoutIfOutside(e, which) {
+  if(e.target === document.getElementById(`slideout-${which}`)) closeSlideout(which);
+}
+
 // ── TAB ROUTING ────────────────────────────────────────────────────
 function showTab(t) {
   document.querySelectorAll('[id^="tab-"]').forEach(el=>el.style.display='none');
   document.querySelectorAll('.tab').forEach((el,i)=>{
     el.classList.remove('active');
-    if(['inventory','add','press','log','reports'][i]===t) el.classList.add('active');
+    if(['inventory','log','reports'][i]===t) el.classList.add('active');
   });
   document.getElementById('tab-'+t).style.display = 'block';
   if(t==='inventory') { updateStats(); updateFilters(); renderCurrentInvView(); }
-  if(t==='add')       { populateAddDropdowns(); if(addMode==='bulk') buildBulkGrid(); }
-  if(t==='press')     { pressCart=[]; populatePressDropdowns(); }
   if(t==='log')       { updateLogFilters(); renderLog(); }
   if(t==='reports')   initReports();
 }
@@ -2355,7 +2377,7 @@ function addBulkStock() {
   const totalQty = entries.reduce((s,e)=>s+e.qty, 0);
   const sizeList = entries.map(e=>`${e.size}×${e.qty}${e.cost!=null?' ($'+e.cost.toFixed(2)+')':''}`).join(', ');
   el.innerHTML=`<div class="alert alert-success">Added ${totalQty} units across ${added} size${added>1?'s':''} for ${brand}${style?' '+style:''} ${color} (${type})${supplier?' via '+supplier:''}: ${sizeList}.</div>`;
-  setTimeout(()=>el.innerHTML='', 6000);
+  setTimeout(()=>{ el.innerHTML=''; closeSlideout('add'); updateStats(); updateFilters(); renderCurrentInvView(); }, 2200);
 
   // Clear qty and cost fields, keep garment selection for quick color/style variants
   SIZES.forEach(size => {
@@ -2402,7 +2424,7 @@ function addStock() {
   });
   saveStockLog();
   el.innerHTML=`<div class="alert alert-success">Added ${qty}× ${brand}${style?' '+style:''} ${color} ${size} (${type})${cost!=null?' at $'+cost.toFixed(2)+'/unit':''}${supplier?' via '+supplier:''}.</div>`;
-  setTimeout(()=>el.innerHTML='', 3500);
+  setTimeout(()=>{ el.innerHTML=''; closeSlideout('add'); updateStats(); updateFilters(); renderCurrentInvView(); }, 1800);
 }
 
 function clearAddForm() {
@@ -2640,7 +2662,7 @@ function submitPressOrder() {
   const costStr   = hasCost ? ` — total blank cost: ${fmt(totalCost)}` : '';
 
   el.innerHTML=`<div class="alert alert-success">Order logged: ${pressCart.length} line${pressCart.length>1?'s':''}, ${totalQty} unit${totalQty>1?'s':''}${shop?' for '+shop:''}${orderNum?' #'+orderNum:''}${costStr}.</div>`;
-  setTimeout(()=>el.innerHTML='', 6000);
+  setTimeout(()=>{ el.innerHTML=''; closeSlideout('press'); updateLogFilters(); renderLog(); updateStats(); }, 1800);
 
   // Reset everything
   pressCart = [];
@@ -2955,12 +2977,26 @@ function deleteLogEntry() {
   const entry = orderLog.find(o => o.id === id);
   if(!entry) return;
   const label = `${entry.brand}${entry.style?' '+entry.style:''} ${entry.color} ${entry.size} ×${entry.qty}${entry.orderNum?' (Order #'+entry.orderNum+')':''}`;
-  if(!confirm(`Delete this order entry?\n\n${label}\n\nThis cannot be undone.`)) return;
+  if(!confirm(`Delete this order entry?\n\n${label}\n\nThe ${entry.qty} unit${entry.qty!==1?'s':''} will be restored to inventory. This cannot be undone.`)) return;
+
+  // Restore stock — add a new lot to the matching inventory item
+  const item = getItem(entry.type, entry.brand, entry.style||'', entry.color, entry.size);
+  if(item) {
+    // Derive cost per unit from blankCost if available
+    const costPerUnit = (entry.blankCost != null && entry.qty > 0)
+      ? Math.round((entry.blankCost / entry.qty) * 100) / 100
+      : null;
+    item.lots.push({ qty: entry.qty, cost: costPerUnit, isoDate: new Date().toISOString() });
+    item.qty = itemTotalQty(item);
+    save();
+  }
+
   orderLog = orderLog.filter(o => o.id !== id);
   saveLog();
   closeEditLog();
   updateLogFilters();
   renderLog();
+  updateStats();
 }
 
 function clearLog() {
@@ -3185,7 +3221,8 @@ function confirmCSVImport() {
   setTimeout(() => {
     document.getElementById('csv-alert').innerHTML = '';
     setAddMode('single');
-    showTab('inventory');
+    closeSlideout('add');
+    updateStats(); updateFilters(); renderCurrentInvView();
   }, 2500);
 }
 
