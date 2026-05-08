@@ -679,6 +679,10 @@
               <select id="log-adv-color" onchange="renderLog()"><option value="">Any color</option></select>
             </div>
             <div class="field">
+              <span class="label">Size</span>
+              <select id="log-adv-size" onchange="renderLog()"><option value="">Any size</option></select>
+            </div>
+            <div class="field">
               <span class="label">Min units in order</span>
               <input type="number" id="log-adv-minunits" min="1" placeholder="e.g. 24" oninput="renderLog()" style="padding:9px 11px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
             </div>
@@ -2985,6 +2989,7 @@ function clearLogAdvanced() {
   document.getElementById('log-adv-brand').value    = '';
   document.getElementById('log-adv-style').value    = '';
   document.getElementById('log-adv-color').value    = '';
+  document.getElementById('log-adv-size').value     = '';
   document.getElementById('log-adv-minunits').value = '';
   renderLog();
 }
@@ -2994,18 +2999,20 @@ function getLogAdvancedFilters() {
     brand:    document.getElementById('log-adv-brand')?.value    || '',
     style:    document.getElementById('log-adv-style')?.value    || '',
     color:    document.getElementById('log-adv-color')?.value    || '',
+    size:     document.getElementById('log-adv-size')?.value     || '',
     minUnits: parseInt(document.getElementById('log-adv-minunits')?.value) || 0,
   };
 }
 
 function advFiltersActive(adv) {
-  return !!(adv.brand || adv.style || adv.color || adv.minUnits > 0);
+  return !!(adv.brand || adv.style || adv.color || adv.size || adv.minUnits > 0);
 }
 
 function lineMatchesAdv(line, adv) {
-  if(adv.brand    && line.brand !== adv.brand)   return false;
-  if(adv.style    && line.style !== adv.style)   return false;
-  if(adv.color    && line.color !== adv.color)   return false;
+  if(adv.brand && line.brand !== adv.brand) return false;
+  if(adv.style && line.style !== adv.style) return false;
+  if(adv.color && line.color !== adv.color) return false;
+  if(adv.size  && line.size  !== adv.size)  return false;
   return true;
 }
 
@@ -3016,6 +3023,10 @@ function updateLogFilters() {
   buildFilterSelect('log-adv-brand','brands', orderLog.map(o=>o.brand).filter(Boolean));
   buildFilterSelect('log-adv-style','styles', orderLog.map(o=>o.style).filter(Boolean));
   buildFilterSelect('log-adv-color','colors', orderLog.map(o=>o.color).filter(Boolean));
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  const sizes = [...new Set(orderLog.map(o=>o.size).filter(Boolean))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
+  const sizeSel = document.getElementById('log-adv-size');
+  if(sizeSel) { const cur=sizeSel.value; sizeSel.innerHTML='<option value="">Any size</option>'+sizes.map(s=>`<option${s===cur?' selected':''}>${s}</option>`).join(''); }
   // Fix labels to say "Any X" instead of "All X"
   ['log-adv-brand','log-adv-style','log-adv-color'].forEach(id => {
     const el = document.getElementById(id);
