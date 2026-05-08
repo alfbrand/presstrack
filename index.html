@@ -146,6 +146,16 @@
     .qty-val { min-width: 28px; text-align: center; font-size: 13px; }
     .cost-preview { background: var(--bg2); border-radius: var(--radius); padding: 12px; margin-bottom: 14px; font-size: 13px; }
 
+    /* RESERVATIONS */
+    .res-badge { font-size:11px; color:var(--warn-text); font-weight:600; white-space:nowrap; }
+    .res-avail  { font-size:11px; color:var(--success-text); font-weight:600; white-space:nowrap; }
+    .res-card { background:var(--bg2); border-radius:var(--radius); padding:10px 12px; margin-bottom:8px; border:0.5px solid var(--border); }
+    .res-card-header { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; gap:8px; flex-wrap:wrap; }
+    .res-card-note { font-size:13px; font-weight:600; flex:1; }
+    .res-card-date { font-size:11px; color:var(--text3); }
+    .res-card-lines { font-size:12px; color:var(--text2); }
+    .res-card-line  { padding:2px 0; }
+
     /* SLIDE-OUT PANELS */
     .slideout-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.45); z-index:150; }
     .slideout-overlay.open { display:block; }
@@ -347,6 +357,7 @@
             <select id="inv-pivot-type" onchange="renderCurrentInvView()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)"></select>
           </div>
           <button class="btn btn-primary" onclick="openSlideout('add')">+ Add stock</button>
+          <button class="btn" onclick="openSlideout('reserve')" id="inv-reserve-btn">🔒 Reservations</button>
         </div>
       </div>
 
@@ -705,6 +716,76 @@
   </div><!-- /main -->
 </div><!-- /app-shell -->
 
+<!-- RESERVATION SLIDE-OUT -->
+<div class="slideout-overlay" id="slideout-reserve" onclick="closeSlideoutIfOutside(event, 'reserve')">
+  <div class="slideout-panel">
+    <div class="slideout-header">
+      <h2>Reservations</h2>
+      <button class="btn-icon" onclick="closeSlideout('reserve')">✕</button>
+    </div>
+    <div class="slideout-body">
+
+      <!-- Active reservations -->
+      <p class="sub-label">Active reservations</p>
+      <div id="res-active-list" style="margin-bottom:1.25rem"></div>
+
+      <hr class="divider">
+
+      <!-- New reservation form -->
+      <p class="sub-label">Create new reservation</p>
+      <div id="res-alert" style="margin-bottom:8px"></div>
+
+      <div class="field" style="margin-bottom:12px;max-width:400px">
+        <span class="label">Note <span style="font-weight:400;color:var(--text3)">(optional)</span></span>
+        <input type="text" id="res-note" placeholder="e.g. Smith wedding, Rush job for Acme">
+      </div>
+
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px">
+        <p class="sub-label" style="margin:0">Reserved items</p>
+        <span id="res-line-count" style="font-size:12px;color:var(--text2)">No items added yet</span>
+      </div>
+      <div id="res-cart" style="margin-bottom:12px"></div>
+
+      <hr class="divider">
+      <p class="sub-label">Add a garment</p>
+      <div class="g4" style="margin-bottom:12px">
+        <div class="field">
+          <span class="label">Type</span>
+          <select id="res-type" onchange="updateResType()"><option value="">Select type</option></select>
+        </div>
+        <div class="field">
+          <span class="label">Brand</span>
+          <select id="res-brand" onchange="updateResBrand()"><option value="">Select brand</option></select>
+        </div>
+        <div class="field">
+          <span class="label">Style</span>
+          <select id="res-style" onchange="updateResStyle()" disabled><option value="">Select style</option></select>
+          <span class="hint" id="res-style-hint">Select a brand first</span>
+        </div>
+        <div class="field">
+          <span class="label">Color</span>
+          <select id="res-color" onchange="updateResColor()"><option value="">Select color</option></select>
+        </div>
+      </div>
+      <div class="g2" style="margin-bottom:12px;max-width:300px">
+        <div class="field">
+          <span class="label">Size</span>
+          <select id="res-size"><option value="">Select size</option></select>
+        </div>
+        <div class="field">
+          <span class="label">Quantity</span>
+          <input type="number" id="res-qty" min="1" value="1">
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:1rem">
+        <button class="btn btn-primary" onclick="addResLine()">+ Add to reservation</button>
+      </div>
+      <hr class="divider">
+      <button class="btn btn-primary" id="res-submit-btn" style="display:none" onclick="submitReservation()">Save reservation</button>
+    </div>
+  </div>
+</div>
+
 <!-- EDIT LOG ENTRY MODAL -->
 <div id="edit-log-overlay" onclick="closeEditLogIfOutside(event)">
   <div id="edit-log-panel">
@@ -913,7 +994,8 @@ let lowThreshold = parseInt(localStorage.getItem('pt_low_threshold') || '5');
 let orderLog  = JSON.parse(localStorage.getItem('pt_log')    || '[]');
 let stockLog  = JSON.parse(localStorage.getItem('pt_slog')   || '[]');
 
-const DEFAULT_TYPES  = ['T-shirt','Hoodie','Long sleeve','Tank top','Tote bag','Hat','Sweatshirt'];
+let reservations = JSON.parse(localStorage.getItem('pt_reservations') || '[]');
+function saveReservations() { try { localStorage.setItem('pt_reservations', JSON.stringify(reservations)); } catch(e){} }
 const DEFAULT_BRANDS = ['Gildan','Bella+Canvas','Next Level','Comfort Colors','Hanes','AS Colour'];
 const DEFAULT_COLORS = ['White','Black','Navy','Gray','Red','Royal Blue','Forest Green','Maroon','Sand','Natural'];
 const BRAND_STYLES   = {
@@ -1559,7 +1641,7 @@ function saveBackfill() {
 
 // ── EXPORT / IMPORT ────────────────────────────────────────────────
 function exportData() {
-  const data = { inventory, orderLog, stockLog, customTypes, customBrands, customColors, customShops, shopColors, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
+  const data = { inventory, orderLog, stockLog, reservations, customTypes, customBrands, customColors, customShops, shopColors, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1580,7 +1662,8 @@ function importData(e) {
       customTypes  = data.customTypes  || [...DEFAULT_TYPES];
       customBrands = data.customBrands || [...DEFAULT_BRANDS];
       customColors = data.customColors || [...DEFAULT_COLORS];
-      customShops  = data.customShops  || [];
+      reservations = data.reservations  || [];
+      customShops  = data.customShops   || [];
       shopColors   = data.shopColors   || {};
       customSuppliers = data.customSuppliers || [];
       brandStyles  = data.brandStyles  || {};
@@ -1694,6 +1777,161 @@ function populateAddDropdowns() {
   document.getElementById('style-hint').textContent = 'Select a brand first';
 }
 
+// ── RESERVATIONS ───────────────────────────────────────────────────
+let resCart = []; // [{type,brand,style,color,size,qty}]
+
+function openReserveSlideout() {
+  resCart = [];
+  renderResCart();
+  renderActiveReservations();
+  // Populate type dropdown from inventory
+  buildSimpleSelect('res-type','type',[...new Set(inventory.map(i=>i.type))]);
+  ['res-brand','res-color','res-size'].forEach(id => {
+    document.getElementById(id).innerHTML = `<option value="">Select ${id.replace('res-','')}</option>`;
+  });
+  const rs = document.getElementById('res-style');
+  rs.innerHTML = '<option value="">Select style</option>'; rs.disabled = true;
+  document.getElementById('res-style-hint').textContent = 'Select a brand first';
+  document.getElementById('res-note').value = '';
+  document.getElementById('res-alert').innerHTML = '';
+}
+
+function updateResType() {
+  const type = document.getElementById('res-type').value;
+  buildSimpleSelect('res-brand','brand',[...new Set(inventory.filter(i=>i.type===type).map(i=>i.brand))]);
+  ['res-style','res-color','res-size'].forEach(id => document.getElementById(id).innerHTML=`<option value="">Select ${id.replace('res-','')}</option>`);
+  document.getElementById('res-style').disabled = true;
+  document.getElementById('res-style-hint').textContent = 'Select a brand first';
+}
+function updateResBrand() {
+  const type=document.getElementById('res-type').value, brand=document.getElementById('res-brand').value;
+  const styles=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand).map(i=>i.style).filter(Boolean))].sort();
+  const rs=document.getElementById('res-style'), hint=document.getElementById('res-style-hint');
+  if(styles.length){ rs.disabled=false; buildSimpleSelect('res-style','style',styles); hint.textContent=`${styles.length} style${styles.length>1?'s':''} for ${brand}`; }
+  else { rs.disabled=true; rs.innerHTML='<option value="">No styles on record</option>'; hint.textContent='No styles for this brand'; }
+  buildSimpleSelect('res-color','color',[]);
+  document.getElementById('res-size').innerHTML='<option value="">Select size</option>';
+}
+function updateResStyle() {
+  const type=document.getElementById('res-type').value, brand=document.getElementById('res-brand').value, style=document.getElementById('res-style').value;
+  const colors=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style).map(i=>i.color))].sort();
+  buildSimpleSelect('res-color','color',colors);
+  document.getElementById('res-size').innerHTML='<option value="">Select size</option>';
+}
+function updateResColor() {
+  const type=document.getElementById('res-type').value, brand=document.getElementById('res-brand').value;
+  const style=document.getElementById('res-style').value, color=document.getElementById('res-color').value;
+  const sizeOrder=['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  const sizes=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style&&i.color===color).map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
+  document.getElementById('res-size').innerHTML='<option value="">Select size</option>'+sizes.map(s=>`<option>${s}</option>`).join('');
+}
+
+function addResLine() {
+  const type=document.getElementById('res-type').value, brand=document.getElementById('res-brand').value;
+  const style=document.getElementById('res-style').value, color=document.getElementById('res-color').value;
+  const size=document.getElementById('res-size').value, qty=parseInt(document.getElementById('res-qty').value)||0;
+  const el=document.getElementById('res-alert');
+  if(!type||!brand||!color||!size||qty<1) {
+    el.innerHTML='<div class="alert alert-error">Select type, brand, color, size and a valid quantity.</div>';
+    setTimeout(()=>el.innerHTML='',3000); return;
+  }
+  const item = getItem(type,brand,style,color,size);
+  if(!item) { el.innerHTML='<div class="alert alert-error">Item not found in inventory.</div>'; setTimeout(()=>el.innerHTML='',3000); return; }
+
+  // Check available qty (stock minus already-reserved minus already-in-this-cart)
+  const alreadyInCart = resCart.filter(l=>l.type===type&&l.brand===brand&&l.style===style&&l.color===color&&l.size===size).reduce((s,l)=>s+l.qty,0);
+  const avail = availableQty(item) - alreadyInCart;
+  if(qty > avail) {
+    el.innerHTML=`<div class="alert alert-error">Only ${avail} available (${itemTotalQty(item)} in stock, ${reservedQtyFor(type,brand,style,color,size)} already reserved, ${alreadyInCart} in this reservation).</div>`;
+    setTimeout(()=>el.innerHTML='',4000); return;
+  }
+  resCart.push({type,brand,style:style||'',color,size,qty});
+  renderResCart();
+  document.getElementById('res-size').value='';
+  document.getElementById('res-qty').value='1';
+}
+
+function renderResCart() {
+  const cartEl   = document.getElementById('res-cart');
+  const countEl  = document.getElementById('res-line-count');
+  const submitBtn= document.getElementById('res-submit-btn');
+  if(!resCart.length) {
+    cartEl.innerHTML='<div class="cart-empty">No items added yet</div>';
+    countEl.textContent='No items added yet';
+    submitBtn.style.display='none'; return;
+  }
+  const totalQty = resCart.reduce((s,l)=>s+l.qty,0);
+  countEl.textContent=`${resCart.length} line${resCart.length>1?'s':''} · ${totalQty} unit${totalQty>1?'s':''}`;
+  cartEl.innerHTML = resCart.map((line,idx)=>`
+    <div class="cart-item">
+      <div class="cart-item-name">${line.brand}${line.style?' <span class="style-tag">'+line.style+'</span>':''} ${line.color} ${line.size}</div>
+      <div class="cart-item-meta">${line.type} · qty ${line.qty}</div>
+      <button class="btn btn-danger btn-sm" onclick="removeResLine(${idx})">✕</button>
+    </div>`).join('');
+  submitBtn.style.display='';
+}
+
+function removeResLine(idx) { resCart.splice(idx,1); renderResCart(); }
+
+function submitReservation() {
+  if(!resCart.length) return;
+  const note = document.getElementById('res-note').value.trim();
+  reservations.push({
+    id: Date.now(),
+    createdAt: new Date().toISOString(),
+    note: note||'Untitled reservation',
+    lines: resCart.map(l=>({...l}))
+  });
+  saveReservations();
+  resCart=[];
+  renderResCart();
+  renderActiveReservations();
+  renderTable(); updateStats();
+  document.getElementById('res-note').value='';
+  document.getElementById('res-alert').innerHTML='<div class="alert alert-success">Reservation saved.</div>';
+  setTimeout(()=>document.getElementById('res-alert').innerHTML='',2000);
+  updateInvReserveBtn();
+}
+
+function releaseReservation(id) {
+  const r = reservations.find(r=>r.id===id);
+  if(!r) return;
+  const totalQty = r.lines.reduce((s,l)=>s+l.qty,0);
+  if(!confirm(`Release reservation "${r.note}"?\n\n${totalQty} unit${totalQty>1?'s':''} will become available again.`)) return;
+  reservations = reservations.filter(r=>r.id!==id);
+  saveReservations();
+  renderActiveReservations();
+  renderTable(); updateStats();
+  updateInvReserveBtn();
+}
+
+function renderActiveReservations() {
+  const el = document.getElementById('res-active-list');
+  if(!reservations.length) {
+    el.innerHTML='<p style="font-size:13px;color:var(--text3)">No active reservations.</p>'; return;
+  }
+  el.innerHTML = reservations.map(r => {
+    const totalQty = r.lines.reduce((s,l)=>s+l.qty,0);
+    const date = new Date(r.createdAt).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+    const linesHtml = r.lines.map(l=>`<div class="res-card-line">· ${l.brand}${l.style?' '+l.style:''} ${l.color} ${l.size} × ${l.qty}</div>`).join('');
+    return `<div class="res-card">
+      <div class="res-card-header">
+        <span class="res-card-note">${r.note}</span>
+        <span class="res-card-date">${date} · ${totalQty} unit${totalQty>1?'s':''}</span>
+        <button class="btn btn-sm" onclick="releaseReservation(${r.id})">Release</button>
+      </div>
+      <div class="res-card-lines">${linesHtml}</div>
+    </div>`;
+  }).join('');
+}
+
+function updateInvReserveBtn() {
+  const btn = document.getElementById('inv-reserve-btn');
+  if(!btn) return;
+  const count = reservations.length;
+  btn.textContent = count > 0 ? `🔒 Reservations (${count})` : '🔒 Reservations';
+}
+
 // ── SLIDE-OUT PANELS ───────────────────────────────────────────────
 function openSlideout(which) {
   document.getElementById(`slideout-${which}`).classList.add('open');
@@ -1705,6 +1943,9 @@ function openSlideout(which) {
     pressCart = [];
     populatePressDropdowns();
     renderPressCart();
+  }
+  if(which === 'reserve') {
+    openReserveSlideout();
   }
 }
 function closeSlideout(which) {
@@ -1731,7 +1972,7 @@ function showTab(t) {
 function updateStats() {
   const total = inventory.reduce((s,i)=>s+itemTotalQty(i), 0);
   const value = inventory.reduce((s,i)=>s+itemStockValue(i), 0);
-  const low   = inventory.filter(i=>{ const q=itemTotalQty(i); return q>0&&q<=lowThreshold; }).length;
+  const low   = inventory.filter(i=>{ const a=availableQty(i); return a>0&&a<=lowThreshold; }).length;
   document.getElementById('stat-total').textContent = total;
   document.getElementById('stat-skus').textContent  = inventory.length;
   document.getElementById('stat-value').textContent = '$'+value.toFixed(2);
@@ -1927,12 +2168,17 @@ function renderTable() {
 
         const tbody = document.createElement('tbody');
         styleItems.forEach(i => {
-          const qty   = itemTotalQty(i);
-          const range = itemCostRange(i);
-          const sv    = itemStockValue(i);
-          const badge = qty===0 ? '<span class="badge badge-zero">Out</span>'
-                      : qty<=lowThreshold ? '<span class="badge badge-low">Low</span>'
+          const qty     = itemTotalQty(i);
+          const reserved = reservedQtyFor(i.type, i.brand, i.style, i.color, i.size);
+          const avail    = Math.max(0, qty - reserved);
+          const badge = avail===0 ? '<span class="badge badge-zero">Out</span>'
+                      : avail<=lowThreshold ? '<span class="badge badge-low">Low</span>'
                       : '<span class="badge badge-ok">In stock</span>';
+          const qtyDisplay = reserved > 0
+            ? `<span style="font-weight:600">${qty}</span> <span class="res-badge">· ${reserved} reserved</span> <span class="res-avail">· ${avail} avail</span>`
+            : `<span style="font-weight:600">${qty}</span>`;
+          const range   = itemCostRange(i);
+          const sv      = itemStockValue(i);
           const svStr   = sv>0 ? '$'+sv.toFixed(2) : '—';
           const costStr = range
             ? `<span title="${i.lots.filter(l=>l.qty>0).map(l=>`${l.qty}× ${fmt(l.cost)}`).join(', ')}">${range.display}</span>`
@@ -1944,11 +2190,11 @@ function renderTable() {
           const watchTitle = i.watch ? 'Watching — click to stop' : 'Click to watch for reorder';
 
           const tr = document.createElement('tr');
-          if(i.watch && qty<=lowThreshold) tr.style.background = 'var(--warn-bg)';
+          if(i.watch && avail<=lowThreshold) tr.style.background = 'var(--warn-bg)';
           tr.innerHTML = `
             <td title="${i.color}">${i.color}</td>
             <td style="font-weight:600">${i.size}</td>
-            <td style="font-weight:600;text-align:center">${qty}</td>
+            <td>${qtyDisplay}</td>
             <td style="font-size:12px">${costStr}${lotLabel}</td>
             <td style="color:var(--text2)">${svStr}</td>
             <td>${badge}</td>
@@ -2020,7 +2266,16 @@ function removeItem(t,b,st,c,s) {
   save(); renderTable(); updateStats(); updateFilters();
 }
 
-// ── INVENTORY VIEWS ────────────────────────────────────────────────
+// ── RESERVATION HELPERS ────────────────────────────────────────────
+function reservedQtyFor(t,b,st,c,s) {
+  return reservations.reduce((sum, r) =>
+    sum + r.lines.filter(l=>l.type===t&&l.brand===b&&l.style===st&&l.color===c&&l.size===s)
+                 .reduce((s2,l)=>s2+l.qty, 0)
+  , 0);
+}
+function availableQty(item) {
+  return Math.max(0, itemTotalQty(item) - reservedQtyFor(item.type, item.brand, item.style, item.color, item.size));
+}
 let invView = 'browse'; // 'browse' | 'color' | 'size'
 
 function setInvView(view) {
@@ -2588,9 +2843,10 @@ function addPressLine() {
   const alreadyInCart = pressCart
     .filter(l=>l.type===type&&l.brand===brand&&l.style===style&&l.color===color&&l.size===size)
     .reduce((s,l)=>s+l.qty, 0);
-  const available = itemTotalQty(item) - alreadyInCart;
+  const available = availableQty(item) - alreadyInCart;
   if(qty > available) {
-    el.innerHTML=`<div class="alert alert-error">Only ${available} available (${itemTotalQty(item)} in stock, ${alreadyInCart} already in this order).</div>`;
+    const reserved = reservedQtyFor(type,brand,style,color,size);
+    el.innerHTML=`<div class="alert alert-error">Only ${available} available (${itemTotalQty(item)} in stock${reserved>0?', '+reserved+' reserved':''}, ${alreadyInCart} already in this order).</div>`;
     setTimeout(()=>el.innerHTML='', 4000); return;
   }
 
@@ -3227,7 +3483,7 @@ function confirmCSVImport() {
 }
 
 // ── INIT ───────────────────────────────────────────────────────────
-updateStats(); updateFilters(); renderTable();
+updateStats(); updateFilters(); renderTable(); updateInvReserveBtn();
 
 // ── REPORTS ────────────────────────────────────────────────────────
 function toggleRptSection(id) {
