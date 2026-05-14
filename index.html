@@ -1936,7 +1936,29 @@ function updateInvReserveBtn() {
   btn.textContent = count > 0 ? `🔒 Reservations (${count})` : '🔒 Reservations';
 }
 
-// ── SLIDE-OUT PANELS ───────────────────────────────────────────────
+function createOrderFromSKU(t, b, st, c, s) {
+  const item = getItem(t, b, st, c, s);
+  if(!item) return;
+  const avail = availableQty(item);
+  if(avail < 1) {
+    alert(`No available stock for ${b}${st?' '+st:''} ${c} ${s} — all units are either reserved or out of stock.`);
+    return;
+  }
+  // Open press order slide-out fresh, then pre-add this SKU
+  pressCart = [];
+  populatePressDropdowns();
+  renderPressCart();
+  document.getElementById('slideout-press').classList.add('open');
+
+  // Simulate FIFO cost for qty 1
+  const lotsClone = item.lots.map(l=>({...l})).sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
+  let remaining=1, totalCost=0, hasCost=false;
+  lotsClone.forEach(lot=>{ if(remaining<=0||lot.qty<=0) return; const take=Math.min(lot.qty,remaining); if(lot.cost!=null){totalCost+=take*lot.cost;hasCost=true;} remaining-=take; });
+  const blankCost = hasCost ? Math.round(totalCost*100)/100 : null;
+
+  pressCart.push({ type:t, brand:b, style:st||'', color:c, size:s, qty:1, blankCost, itemKey:`${t}|${b}|${st}|${c}|${s}` });
+  renderPressCart();
+}
 function openSlideout(which) {
   document.getElementById(`slideout-${which}`).classList.add('open');
   if(which === 'add') {
@@ -2203,7 +2225,10 @@ function renderTable() {
             <td style="color:var(--text2)">${svStr}</td>
             <td>${badge}</td>
             <td><button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">${watchIcon}</button></td>
-            <td><button class="btn btn-danger btn-sm" onclick="removeItem('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">Remove</button></td>`;
+            <td style="white-space:nowrap">
+              <button class="btn btn-sm" onclick="createOrderFromSKU('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')" title="Create press order for this SKU" ${avail<1?'disabled style="opacity:0.4"':''}>Order</button>
+              <button class="btn btn-danger btn-sm" onclick="removeItem('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">Remove</button>
+            </td>`;
           tbody.appendChild(tr);
         });
 
