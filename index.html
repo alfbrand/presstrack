@@ -8,7 +8,6 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -53,7 +52,7 @@
     /* TABS */
     .tabs { display: flex; border-bottom: 0.5px solid var(--border); margin-bottom: 1.5rem; overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .tabs::-webkit-scrollbar { display: none; }
-    .tab { padding: 10px 16px; font-size: 14px; cursor: pointer; border: none; background: none; color: var(--text2); border-bottom: 2px solid transparent; margin-bottom: -0.5px; white-space: nowrap; font-family: var(--font); }
+    .tab { padding: 10px 16px; font-size: 14px; cursor: pointer; border: none; background: none; color: var(--text2); border-bottom: 2px solid transparent; margin-bottom: -0.5px; white-space: nowrap; font-family: var(--font); display:inline-flex; align-items:center; gap:6px; }
     .tab.active { color: var(--text); border-bottom-color: var(--text); font-weight: 500; }
     .tab:hover:not(.active) { color: var(--text); }
 
@@ -342,9 +341,9 @@
 
   <div id="main">
     <div class="tabs">
-      <button class="tab active" onclick="showTab('inventory')">Inventory</button>
-      <button class="tab" onclick="showTab('log')">Order log</button>
-      <button class="tab" onclick="showTab('reports')">Reports</button>
+      <button class="tab active" onclick="showTab('inventory')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0 0-1.34-2.23z"/></svg>Inventory</button>
+      <button class="tab" onclick="showTab('log')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>Order log</button>
+      <button class="tab" onclick="showTab('reports')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>Reports</button>
     </div>
 
     <!-- ── INVENTORY ── -->
@@ -370,7 +369,7 @@
             <select id="inv-pivot-type" onchange="renderCurrentInvView()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)"></select>
           </div>
           <button class="btn btn-primary" onclick="openSlideout('add')">+ Add stock</button>
-          <button class="btn" onclick="openSlideout('reserve')" id="inv-reserve-btn"><i data-lucide="lock" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"></i>Reservations</button>
+          <button class="btn" onclick="openSlideout('reserve')" id="inv-reserve-btn"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Reservations</button>
         </div>
       </div>
 
@@ -754,7 +753,7 @@
   <!-- WORKING RESERVATION BAR -->
   <div id="working-res-bar">
     <div class="working-res-inner">
-      <span class="working-res-label"><i data-lucide="lock" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"></i>Working reservation — <span id="working-res-count">0 items</span></span>
+      <span class="working-res-label"><svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;margin-right:4px"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Working reservation — <span id="working-res-count">0 items</span></span>
       <span class="working-res-items" id="working-res-summary"></span>
       <div style="display:flex;gap:8px;flex-shrink:0">
         <button class="btn btn-sm" onclick="openSlideout('reserve')" style="border-color:var(--warn-text);color:var(--warn-text)">Review &amp; save</button>
@@ -1157,19 +1156,18 @@ function shopPillHTML(shop) {
 function esc(v) { return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
 
 // ── ICONS ──────────────────────────────────────────────────────────
-// Lucide UMD format: icons[name] = [tagName, svgAttrs, [[childTag, childAttrs], ...]]
-function lucideIcon(name, size=16, extraStyle='') {
-  if(typeof lucide === 'undefined' || !lucide.icons) return '';
-  const icon = lucide.icons[name];
-  if(!icon) return '';
-  const [, svgAttrs, children] = icon;
-  const attrs = {...svgAttrs, width:size, height:size,
-    stroke:'currentColor', 'stroke-width':'2',
-    'stroke-linecap':'round', 'stroke-linejoin':'round', fill:'none',
-    style:`display:inline;vertical-align:middle;flex-shrink:0${extraStyle?';'+extraStyle:''}`};
-  const attrStr = Object.entries(attrs).map(([k,v])=>`${k}="${v}"`).join(' ');
-  const childStr = (children||[]).map(([t,a])=>`<${t} ${Object.entries(a).map(([k,v])=>`${k}="${v}"`).join(' ')}/>`).join('');
-  return `<svg ${attrStr}>${childStr}</svg>`;
+// Inline SVG icons — Lucide stroke style, 24x24 viewBox
+const ICONS = {
+  bell:          `<path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>`,
+  'bell-off':    `<line x1="8.56" y1="2.9" x2="19" y2="19"/><line x1="2" y1="2" x2="22" y2="22"/><path d="M6.36 6.36A6 6 0 0 0 6 8c0 7-3 9-3 9h14"/><path d="M18 8a6 6 0 0 0-.94-3.26"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>`,
+  lock:          `<rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>`,
+  shirt:         `<path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0 0-1.34-2.23z"/>`,
+  'receipt-text':`<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/>`,
+  'chart-pie':   `<path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/>`,
+};
+function lucideIcon(name, size=16) {
+  const paths = ICONS[name] || '';
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:inline;vertical-align:middle;flex-shrink:0">${paths}</svg>`;
 }
 
 // ── NORMALIZATION ──────────────────────────────────────────────────
@@ -2226,7 +2224,6 @@ function updateInvReserveBtn() {
   btn.innerHTML = count > 0
     ? `${lockIcon} Reservations (${count})`
     : `${lockIcon} Reservations`;
-  if(typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 function createOrderFromSKU(t, b, st, c, s) {
@@ -4018,9 +4015,6 @@ function confirmCSVImport() {
 
 // ── INIT ───────────────────────────────────────────────────────────
 updateStats(); updateFilters(); renderTable(); updateInvReserveBtn();
-// Render Lucide icons for static HTML elements
-document.addEventListener('DOMContentLoaded', () => { if(typeof lucide !== 'undefined') lucide.createIcons(); });
-if(typeof lucide !== 'undefined') lucide.createIcons();
 
 // ── REPORTS ────────────────────────────────────────────────────────
 function toggleRptSection(id) {
