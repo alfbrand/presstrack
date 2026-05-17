@@ -561,6 +561,18 @@
         </div>
         <div class="slideout-body">
           <div id="press-alert"></div>
+
+          <!-- Fill from reservation -->
+          <div id="press-res-fill-section" style="display:none;background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;border:0.5px solid var(--border)">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:10px;flex-wrap:wrap">
+              <p class="sub-label" style="margin:0;flex:1">Fill from reservation</p>
+              <select id="press-res-select" onchange="renderPressResFill()" style="flex:2;min-width:160px;font-size:13px;padding:5px 8px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+                <option value="">Select a reservation…</option>
+              </select>
+            </div>
+            <div id="press-res-fill-lines"></div>
+          </div>
+
           <p class="sub-label">Order details</p>
           <div class="g4" style="margin-bottom:12px">
             <div class="field">
@@ -1866,15 +1878,9 @@ function quickReserve(t, b, st, c, s) {
   const inCart = workingRes.filter(l=>l.type===t&&l.brand===b&&l.style===st&&l.color===c&&l.size===s).reduce((s,l)=>s+l.qty,0);
   const avail  = availableQty(item) - inCart;
   if(avail < 1) { alert(`No available stock left for ${b}${st?' '+st:''} ${c} ${s}.`); return; }
-  const label = `${b}${st?' '+st:''} ${c} ${s}`;
-  const input = window.prompt(`Reserve how many units of ${label}?\n(${avail} available)`, String(avail));
-  if(input === null) return;
-  const qty = parseInt(input);
-  if(isNaN(qty) || qty < 1) { alert('Please enter a valid quantity.'); return; }
-  if(qty > avail) { alert(`Only ${avail} available.`); return; }
   const existing = workingRes.find(l=>l.type===t&&l.brand===b&&l.style===st&&l.color===c&&l.size===s);
-  if(existing) existing.qty += qty;
-  else workingRes.push({type:t, brand:b, style:st||'', color:c, size:s, qty});
+  if(existing) existing.qty += 1;
+  else workingRes.push({type:t, brand:b, style:st||'', color:c, size:s, qty:1});
   renderWorkingResBar();
   renderCurrentInvView();
 }
@@ -2207,6 +2213,8 @@ function createOrderFromSKU(t, b, st, c, s) {
   populatePressDropdowns();
   renderPressCart();
   document.getElementById('slideout-press').classList.add('open');
+  populatePressResFillDropdown();
+  document.getElementById('press-res-fill-lines').innerHTML = '';
 
   // Simulate FIFO cost for qty 1
   const lotsClone = item.lots.map(l=>({...l})).sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
@@ -2227,6 +2235,8 @@ function openSlideout(which) {
     pressCart = [];
     populatePressDropdowns();
     renderPressCart();
+    populatePressResFillDropdown();
+    document.getElementById('press-res-fill-lines').innerHTML = '';
   }
   if(which === 'reserve') {
     openReserveSlideout();
@@ -3000,6 +3010,128 @@ function clearAddForm() {
   document.getElementById('bulk-fill-val').value='';
   const bfc = document.getElementById('bulk-fill-cost');
   if(bfc) bfc.value='';
+}
+
+// ── PRESS ORDER RESERVATION FILL ───────────────────────────────────
+function populatePressResFillDropdown() {
+  const sel = document.getElementById('press-res-select');
+  if(!sel) return;
+  const section = document.getElementById('press-res-fill-section');
+
+  const opts = [];
+  if(workingRes.length) opts.push({ id:'__working__', label:`Working reservation (${workingRes.reduce((s,l)=>s+l.qty,0)} units)`, lines: workingRes });
+  reservations.forEach(r => {
+    const qty = r.lines.reduce((s,l)=>s+l.qty,0);
+    if(qty > 0) opts.push({ id: String(r.id), label:`${r.note} (${qty} units)`, lines: r.lines });
+  });
+
+  if(!opts.length) { section.style.display='none'; return; }
+  section.style.display='';
+  const cur = sel.value;
+  sel.innerHTML = '<option value="">Select a reservation…</option>' +
+    opts.map(o=>`<option value="${o.id}"${o.id===cur?' selected':''}>${o.label}</option>`).join('');
+}
+
+function getResLines(id) {
+  if(id === '__working__') return workingRes;
+  const r = reservations.find(r=>String(r.id)===id);
+  return r ? r.lines : [];
+}
+
+function renderPressResFill() {
+  const id    = document.getElementById('press-res-select').value;
+  const lines = id ? getResLines(id) : [];
+  const el    = document.getElementById('press-res-fill-lines');
+  if(!id || !lines.length) { el.innerHTML=''; return; }
+
+  const allAvail = lines.every(l => {
+    const item = getItem(l.type, l.brand, l.style, l.color, l.size);
+    if(!item) return false;
+    const inCart = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
+    return (itemTotalQty(item) - inCart) >= l.qty;
+  });
+
+  el.innerHTML = `
+    <div style="margin-bottom:8px">
+      <button class="btn btn-sm btn-primary" onclick="pressResAddAll('${id}')" ${!allAvail?'disabled title="Some items have insufficient stock"':''}>+ Add all to order</button>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:5px">
+      ${lines.map((l,idx) => {
+        const item = getItem(l.type, l.brand, l.style, l.color, l.size);
+        const inCart = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
+        const avail = item ? itemTotalQty(item) - inCart : 0;
+        const canAdd = avail >= l.qty;
+        return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 8px;background:var(--bg);border-radius:var(--radius);flex-wrap:wrap">
+          <span style="flex:1;min-width:140px;font-weight:500">${l.brand}${l.style?' <span class=style-tag>'+l.style+'</span>':''} ${l.color} ${l.size}</span>
+          <span style="color:var(--text2)">×${l.qty}</span>
+          ${!canAdd?`<span style="color:var(--danger-text);font-size:11px">only ${avail} avail</span>`:''}
+          <button class="btn btn-sm" onclick="pressResAddLine('${id}',${idx})" ${!canAdd?'disabled':''}>+ Add</button>
+        </div>`;
+      }).join('')}
+    </div>`;
+}
+
+function pressResAddLine(resId, lineIdx) {
+  const lines = getResLines(resId);
+  const l = lines[lineIdx];
+  if(!l) return;
+  const item = getItem(l.type, l.brand, l.style, l.color, l.size);
+  if(!item) { document.getElementById('press-alert').innerHTML='<div class="alert alert-error">Item not found in inventory.</div>'; setTimeout(()=>document.getElementById('press-alert').innerHTML='',3000); return; }
+
+  const inCart = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
+  if(itemTotalQty(item) - inCart < l.qty) { document.getElementById('press-alert').innerHTML='<div class="alert alert-error">Not enough stock available.</div>'; setTimeout(()=>document.getElementById('press-alert').innerHTML='',3000); return; }
+
+  // FIFO cost
+  const lotsClone = item.lots.map(x=>({...x})).sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
+  let remaining=l.qty, totalCost=0, hasCost=false;
+  lotsClone.forEach(lot=>{ if(remaining<=0||lot.qty<=0) return; const take=Math.min(lot.qty,remaining); if(lot.cost!=null){totalCost+=take*lot.cost;hasCost=true;} remaining-=take; });
+  pressCart.push({type:l.type,brand:l.brand,style:l.style||'',color:l.color,size:l.size,qty:l.qty,blankCost:hasCost?Math.round(totalCost*100)/100:null,itemKey:`${l.type}|${l.brand}|${l.style}|${l.color}|${l.size}`});
+  renderPressCart();
+
+  // Deduct from reservation
+  deductFromReservation(resId, l, l.qty);
+  renderPressResFill();
+  populatePressResFillDropdown();
+}
+
+function pressResAddAll(resId) {
+  const lines = [...getResLines(resId)];
+  lines.forEach((l, idx) => {
+    const item = getItem(l.type, l.brand, l.style, l.color, l.size);
+    if(!item) return;
+    const inCart = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
+    if(itemTotalQty(item) - inCart < l.qty) return;
+    const lotsClone = item.lots.map(x=>({...x})).sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
+    let remaining=l.qty, totalCost=0, hasCost=false;
+    lotsClone.forEach(lot=>{ if(remaining<=0||lot.qty<=0) return; const take=Math.min(lot.qty,remaining); if(lot.cost!=null){totalCost+=take*lot.cost;hasCost=true;} remaining-=take; });
+    pressCart.push({type:l.type,brand:l.brand,style:l.style||'',color:l.color,size:l.size,qty:l.qty,blankCost:hasCost?Math.round(totalCost*100)/100:null,itemKey:`${l.type}|${l.brand}|${l.style}|${l.color}|${l.size}`});
+    deductFromReservation(resId, l, l.qty);
+  });
+  renderPressCart();
+  renderPressResFill();
+  populatePressResFillDropdown();
+}
+
+function deductFromReservation(resId, line, qty) {
+  if(resId === '__working__') {
+    const idx = workingRes.findIndex(l=>l.type===line.type&&l.brand===line.brand&&l.style===line.style&&l.color===line.color&&l.size===line.size);
+    if(idx !== -1) {
+      workingRes[idx].qty -= qty;
+      if(workingRes[idx].qty <= 0) workingRes.splice(idx, 1);
+    }
+    renderWorkingResBar();
+  } else {
+    const r = reservations.find(r=>String(r.id)===resId);
+    if(!r) return;
+    const idx = r.lines.findIndex(l=>l.type===line.type&&l.brand===line.brand&&l.style===line.style&&l.color===line.color&&l.size===line.size);
+    if(idx !== -1) {
+      r.lines[idx].qty -= qty;
+      if(r.lines[idx].qty <= 0) r.lines.splice(idx, 1);
+    }
+    if(!r.lines.length) reservations = reservations.filter(x=>x.id!==r.id);
+    saveReservations();
+    updateInvReserveBtn();
+  }
 }
 
 // ── PRESS ORDER ────────────────────────────────────────────────────
