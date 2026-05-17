@@ -8,6 +8,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" type="image/png" href="icon-192.png">
   <link rel="apple-touch-icon" href="icon-192.png">
+  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
@@ -369,7 +370,7 @@
             <select id="inv-pivot-type" onchange="renderCurrentInvView()" style="padding:6px 10px;font-size:13px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)"></select>
           </div>
           <button class="btn btn-primary" onclick="openSlideout('add')">+ Add stock</button>
-          <button class="btn" onclick="openSlideout('reserve')" id="inv-reserve-btn">🔒 Reservations</button>
+          <button class="btn" onclick="openSlideout('reserve')" id="inv-reserve-btn"><i data-lucide="lock" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"></i>Reservations</button>
         </div>
       </div>
 
@@ -753,7 +754,7 @@
   <!-- WORKING RESERVATION BAR -->
   <div id="working-res-bar">
     <div class="working-res-inner">
-      <span class="working-res-label">🔒 Working reservation — <span id="working-res-count">0 items</span></span>
+      <span class="working-res-label"><i data-lucide="lock" style="width:14px;height:14px;display:inline;vertical-align:middle;margin-right:4px"></i>Working reservation — <span id="working-res-count">0 items</span></span>
       <span class="working-res-items" id="working-res-summary"></span>
       <div style="display:flex;gap:8px;flex-shrink:0">
         <button class="btn btn-sm" onclick="openSlideout('reserve')" style="border-color:var(--warn-text);color:var(--warn-text)">Review &amp; save</button>
@@ -1154,6 +1155,22 @@ function shopPillHTML(shop) {
   return `<span class="shop-pill"${shopPillStyle(shop)}>${shop}</span>`;
 }
 function esc(v) { return String(v||'').replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+
+// ── ICONS ──────────────────────────────────────────────────────────
+// Lucide UMD format: icons[name] = [tagName, svgAttrs, [[childTag, childAttrs], ...]]
+function lucideIcon(name, size=16, extraStyle='') {
+  if(typeof lucide === 'undefined' || !lucide.icons) return '';
+  const icon = lucide.icons[name];
+  if(!icon) return '';
+  const [, svgAttrs, children] = icon;
+  const attrs = {...svgAttrs, width:size, height:size,
+    stroke:'currentColor', 'stroke-width':'2',
+    'stroke-linecap':'round', 'stroke-linejoin':'round', fill:'none',
+    style:`display:inline;vertical-align:middle;flex-shrink:0${extraStyle?';'+extraStyle:''}`};
+  const attrStr = Object.entries(attrs).map(([k,v])=>`${k}="${v}"`).join(' ');
+  const childStr = (children||[]).map(([t,a])=>`<${t} ${Object.entries(a).map(([k,v])=>`${k}="${v}"`).join(' ')}/>`).join('');
+  return `<svg ${attrStr}>${childStr}</svg>`;
+}
 
 // ── NORMALIZATION ──────────────────────────────────────────────────
 // Types, Brands, and Styles are title-cased to prevent case duplicates.
@@ -2205,7 +2222,11 @@ function updateInvReserveBtn() {
   const btn = document.getElementById('inv-reserve-btn');
   if(!btn) return;
   const count = reservations.length;
-  btn.textContent = count > 0 ? `🔒 Reservations (${count})` : '🔒 Reservations';
+  const lockIcon = lucideIcon('lock', 14);
+  btn.innerHTML = count > 0
+    ? `${lockIcon} Reservations (${count})`
+    : `${lockIcon} Reservations`;
+  if(typeof lucide !== 'undefined') lucide.createIcons();
 }
 
 function createOrderFromSKU(t, b, st, c, s) {
@@ -2518,7 +2539,7 @@ function renderTable() {
           const lotLabel = i.lots.length>1 ? ` <span style="color:var(--text3);font-size:10px">(${i.lots.length} lots)</span>` : '';
           const ev = v => esc(v);
           const watchClass = i.watch ? 'btn-watch watching' : 'btn-watch';
-          const watchIcon  = i.watch ? '🔔' : '🔕';
+          const watchIcon  = i.watch ? lucideIcon('bell', 15) : lucideIcon('bell-off', 15);
           const watchTitle = i.watch ? 'Watching — click to stop' : 'Click to watch for reorder';
 
           const tr = document.createElement('tr');
@@ -2577,7 +2598,7 @@ function renderReorderPanel() {
   const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
   watched.sort((a,b) => itemTotalQty(a) - itemTotalQty(b) || a.brand.localeCompare(b.brand));
   let html = `<div class="reorder-panel">
-    <h3>🔔 Reorder needed — ${watched.length} SKU${watched.length>1?'s':''} low or out</h3>`;
+    <h3>${lucideIcon('bell', 14)} Reorder needed — ${watched.length} SKU${watched.length>1?'s':''} low or out</h3>`;
   watched.forEach(i => {
     const qty = itemTotalQty(i);
     const statusText = qty === 0 ? 'OUT OF STOCK' : `${qty} left`;
@@ -3997,6 +4018,9 @@ function confirmCSVImport() {
 
 // ── INIT ───────────────────────────────────────────────────────────
 updateStats(); updateFilters(); renderTable(); updateInvReserveBtn();
+// Render Lucide icons for static HTML elements
+document.addEventListener('DOMContentLoaded', () => { if(typeof lucide !== 'undefined') lucide.createIcons(); });
+if(typeof lucide !== 'undefined') lucide.createIcons();
 
 // ── REPORTS ────────────────────────────────────────────────────────
 function toggleRptSection(id) {
