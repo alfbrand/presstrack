@@ -376,11 +376,19 @@
       <!-- Browse view -->
       <div id="inv-view-browse">
         <div class="filter-row">
-          <select id="filter-type"  onchange="renderTable()"><option value="">All types</option></select>
-          <select id="filter-brand" onchange="onFilterBrandChange()"><option value="">All brands</option></select>
-          <select id="filter-style" onchange="renderTable()"><option value="">All styles</option></select>
-          <select id="filter-color" onchange="renderTable()"><option value="">All colors</option></select>
-          <select id="filter-size"  onchange="renderTable()"><option value="">All sizes</option></select>
+          <select id="filter-type"   onchange="renderTable()"><option value="">All types</option></select>
+          <select id="filter-brand"  onchange="onFilterBrandChange()"><option value="">All brands</option></select>
+          <select id="filter-style"  onchange="renderTable()"><option value="">All styles</option></select>
+          <select id="filter-color"  onchange="renderTable()"><option value="">All colors</option></select>
+          <select id="filter-size"   onchange="renderTable()"><option value="">All sizes</option></select>
+          <select id="filter-status" onchange="renderTable()" style="min-width:130px">
+            <option value="">All statuses</option>
+            <option value="instock">In stock</option>
+            <option value="low">Low stock</option>
+            <option value="lowinstock">Low + In stock</option>
+            <option value="out">Out of stock</option>
+          </select>
+          <button class="btn btn-sm" id="inv-filter-reset-btn" onclick="resetInvFilters()" style="display:none;white-space:nowrap;flex-shrink:0">✕ Reset</button>
         </div>
         <div id="inv-groups"></div>
       </div>
@@ -2299,21 +2307,41 @@ function onFilterBrandChange(skipRender) {
   if(!skipRender) renderTable();
 }
 function renderTable() {
-  const fb  = document.getElementById('filter-brand').value;
-  const fst = document.getElementById('filter-style').value;
-  const fc  = document.getElementById('filter-color').value;
-  const fs  = document.getElementById('filter-size').value;
-  const ft  = document.getElementById('filter-type').value;
+  const fb      = document.getElementById('filter-brand').value;
+  const fst     = document.getElementById('filter-style').value;
+  const fc      = document.getElementById('filter-color').value;
+  const fs      = document.getElementById('filter-size').value;
+  const ft      = document.getElementById('filter-type').value;
+  const fstatus = document.getElementById('filter-status')?.value || '';
   const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
 
-  const filtered = inventory.filter(i =>
-    (!ft||i.type===ft) && (!fb||i.brand===fb) &&
-    (!fst||i.style===fst) && (!fc||i.color===fc) && (!fs||i.size===fs)
-  );
+  // Show/hide reset button
+  const resetBtn = document.getElementById('inv-filter-reset-btn');
+  if(resetBtn) resetBtn.style.display = (fb||fst||fc||fs||ft||fstatus) ? '' : 'none';
+
+  const isFiltered = !!(fb||fst||fc||fs||ft||fstatus);
+
+  const filtered = inventory.filter(i => {
+    if(ft  && i.type  !== ft)  return false;
+    if(fb  && i.brand !== fb)  return false;
+    if(fst && i.style !== fst) return false;
+    if(fc  && i.color !== fc)  return false;
+    if(fs  && i.size  !== fs)  return false;
+    if(fstatus) {
+      const avail = availableQty(i);
+      if(fstatus === 'out'        && avail !== 0)                          return false;
+      if(fstatus === 'low'        && !(avail > 0 && avail <= lowThreshold)) return false;
+      if(fstatus === 'instock'    && avail <= lowThreshold)                 return false;
+      if(fstatus === 'lowinstock' && avail === 0)                           return false;
+    }
+    return true;
+  });
 
   const container = document.getElementById('inv-groups');
   if(!filtered.length) {
-    container.innerHTML = `<div class="empty">No inventory yet — add stock to get started</div>`;
+    container.innerHTML = isFiltered
+      ? `<div class="empty">No items match the current filters.</div>`
+      : `<div class="empty">No inventory yet — add stock to get started</div>`;
     renderReorderPanel();
     return;
   }
@@ -2336,8 +2364,6 @@ function renderTable() {
       )
     )
   );
-
-  const isFiltered = !!(fb || fst || fc || fs || ft);
 
   // Preserve collapse state across re-renders (ignored when filtered)
   const openTypes  = new Set(container._openTypes  || []);
@@ -2614,8 +2640,15 @@ function populatePivotTypeDropdown() {
   if(!sel.value && types.includes('T-shirt')) sel.value = 'T-shirt';
 }
 
+function resetInvFilters() {
+  ['filter-type','filter-brand','filter-style','filter-color','filter-size','filter-status'].forEach(id => {
+    const el = document.getElementById(id);
+    if(el) el.value = '';
+  });
+  renderTable();
+}
+
 function renderCurrentInvView() {
-  if(invView === 'browse') { renderTable(); return; }
   if(invView === 'color')  { renderColorGrid(); return; }
   if(invView === 'size')   { renderSizeGrid(); return; }
 }
