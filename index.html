@@ -2210,6 +2210,7 @@ function createOrderFromSKU(t, b, st, c, s) {
   }
   // Open press order slide-out fresh, then pre-add this SKU
   pressCart = [];
+  pressResUsage = [];
   populatePressDropdowns();
   renderPressCart();
   document.getElementById('slideout-press').classList.add('open');
@@ -2233,6 +2234,7 @@ function openSlideout(which) {
   }
   if(which === 'press') {
     pressCart = [];
+    pressResUsage = [];
     populatePressDropdowns();
     renderPressCart();
     populatePressResFillDropdown();
@@ -2248,6 +2250,9 @@ function openSlideout(which) {
   }
 }
 function closeSlideout(which) {
+  if(which === 'press') {
+    pressResUsage = [];
+  }
   document.getElementById(`slideout-${which}`).classList.remove('open');
 }
 function closeSlideoutIfOutside(e, which) {
@@ -3019,10 +3024,10 @@ function populatePressResFillDropdown() {
   const section = document.getElementById('press-res-fill-section');
 
   const opts = [];
-  if(workingRes.length) opts.push({ id:'__working__', label:`Working reservation (${workingRes.reduce((s,l)=>s+l.qty,0)} units)`, lines: workingRes });
+  if(workingRes.length) opts.push({ id:'__working__', label:`Working reservation (${workingRes.reduce((s,l)=>s+l.qty,0)} units)` });
   reservations.forEach(r => {
     const qty = r.lines.reduce((s,l)=>s+l.qty,0);
-    if(qty > 0) opts.push({ id: String(r.id), label:`${r.note} (${qty} units)`, lines: r.lines });
+    if(qty > 0) opts.push({ id: String(r.id), label:`${r.note} (${qty} units)` });
   });
 
   if(!opts.length) { section.style.display='none'; return; }
@@ -3038,34 +3043,40 @@ function getResLines(id) {
   return r ? r.lines : [];
 }
 
+// How many units of this SKU are already pending-used from a given reservation
+function pendingUsed(resId, l) {
+  return pressResUsage
+    .filter(u=>u.resId===resId&&u.type===l.type&&u.brand===l.brand&&u.style===l.style&&u.color===l.color&&u.size===l.size)
+    .reduce((s,u)=>s+u.qty, 0);
+}
+
 function renderPressResFill() {
   const id    = document.getElementById('press-res-select').value;
   const lines = id ? getResLines(id) : [];
   const el    = document.getElementById('press-res-fill-lines');
   if(!id || !lines.length) { el.innerHTML=''; return; }
 
-  const allAvail = lines.every(l => {
-    const item = getItem(l.type, l.brand, l.style, l.color, l.size);
-    if(!item) return false;
-    const inCart = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
-    return (itemTotalQty(item) - inCart) >= l.qty;
-  });
-
   el.innerHTML = `
-    <div style="margin-bottom:8px">
-      <button class="btn btn-sm btn-primary" onclick="pressResAddAll('${id}')" ${!allAvail?'disabled title="Some items have insufficient stock"':''}>+ Add all to order</button>
+    <div style="display:flex;align-items:center;justify-content:flex-end;margin-bottom:8px">
+      <button class="btn btn-sm btn-primary" onclick="pressResAddAll('${id}')">+ Add all to order</button>
     </div>
     <div style="display:flex;flex-direction:column;gap:5px">
-      ${lines.map((l,idx) => {
-        const item = getItem(l.type, l.brand, l.style, l.color, l.size);
-        const inCart = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
-        const avail = item ? itemTotalQty(item) - inCart : 0;
-        const canAdd = avail >= l.qty;
-        return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:5px 8px;background:var(--bg);border-radius:var(--radius);flex-wrap:wrap">
+      ${lines.map((l, idx) => {
+        const used      = pendingUsed(id, l);
+        const remaining = l.qty - used;
+        const item      = getItem(l.type, l.brand, l.style, l.color, l.size);
+        const inCart    = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
+        const stockAvail = item ? itemTotalQty(item) - inCart : 0;
+        const canAdd    = remaining > 0 && stockAvail > 0;
+        const maxQty    = Math.min(remaining, stockAvail);
+        return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;padding:6px 8px;background:var(--bg);border-radius:var(--radius);flex-wrap:wrap">
           <span style="flex:1;min-width:140px;font-weight:500">${l.brand}${l.style?' <span class=style-tag>'+l.style+'</span>':''} ${l.color} ${l.size}</span>
-          <span style="color:var(--text2)">×${l.qty}</span>
-          ${!canAdd?`<span style="color:var(--danger-text);font-size:11px">only ${avail} avail</span>`:''}
-          <button class="btn btn-sm" onclick="pressResAddLine('${id}',${idx})" ${!canAdd?'disabled':''}>+ Add</button>
+          <span style="color:var(--text2);font-size:11px">${remaining} reserved${used>0?' ('+used+' in order)':''}</span>
+          ${canAdd ? `<div style="display:flex;align-items:center;gap:4px">
+            <input type="number" id="res-fill-qty-${idx}" min="1" max="${maxQty}" value="${Math.min(1,maxQty)}"
+              style="width:52px;padding:4px 6px;font-size:12px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);text-align:center">
+            <button class="btn btn-sm" onclick="pressResAddLine('${id}',${idx})">+ Add</button>
+          </div>` : `<span style="color:var(--text3);font-size:11px">${remaining===0?'Fully added':'No stock'}</span>`}
         </div>`;
       }).join('')}
     </div>`;
@@ -3075,41 +3086,54 @@ function pressResAddLine(resId, lineIdx) {
   const lines = getResLines(resId);
   const l = lines[lineIdx];
   if(!l) return;
-  const item = getItem(l.type, l.brand, l.style, l.color, l.size);
-  if(!item) { document.getElementById('press-alert').innerHTML='<div class="alert alert-error">Item not found in inventory.</div>'; setTimeout(()=>document.getElementById('press-alert').innerHTML='',3000); return; }
 
-  const inCart = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
-  if(itemTotalQty(item) - inCart < l.qty) { document.getElementById('press-alert').innerHTML='<div class="alert alert-error">Not enough stock available.</div>'; setTimeout(()=>document.getElementById('press-alert').innerHTML='',3000); return; }
+  const qtyInput = document.getElementById(`res-fill-qty-${lineIdx}`);
+  const qty = qtyInput ? Math.max(1, parseInt(qtyInput.value)||1) : 1;
+
+  const item = getItem(l.type, l.brand, l.style, l.color, l.size);
+  if(!item) return;
+
+  const used      = pendingUsed(resId, l);
+  const remaining = l.qty - used;
+  const inCart    = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
+  const stockAvail = itemTotalQty(item) - inCart;
+
+  const actualQty = Math.min(qty, remaining, stockAvail);
+  if(actualQty < 1) return;
 
   // FIFO cost
   const lotsClone = item.lots.map(x=>({...x})).sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
-  let remaining=l.qty, totalCost=0, hasCost=false;
-  lotsClone.forEach(lot=>{ if(remaining<=0||lot.qty<=0) return; const take=Math.min(lot.qty,remaining); if(lot.cost!=null){totalCost+=take*lot.cost;hasCost=true;} remaining-=take; });
-  pressCart.push({type:l.type,brand:l.brand,style:l.style||'',color:l.color,size:l.size,qty:l.qty,blankCost:hasCost?Math.round(totalCost*100)/100:null,itemKey:`${l.type}|${l.brand}|${l.style}|${l.color}|${l.size}`});
-  renderPressCart();
+  let rem=actualQty, totalCost=0, hasCost=false;
+  lotsClone.forEach(lot=>{ if(rem<=0||lot.qty<=0) return; const take=Math.min(lot.qty,rem); if(lot.cost!=null){totalCost+=take*lot.cost;hasCost=true;} rem-=take; });
+  pressCart.push({type:l.type,brand:l.brand,style:l.style||'',color:l.color,size:l.size,qty:actualQty,blankCost:hasCost?Math.round(totalCost*100)/100:null,itemKey:`${l.type}|${l.brand}|${l.style}|${l.color}|${l.size}`,fromRes:resId});
 
-  // Deduct from reservation
-  deductFromReservation(resId, l, l.qty);
+  // Record pending usage (not yet deducted from reservation)
+  pressResUsage.push({resId, type:l.type, brand:l.brand, style:l.style||'', color:l.color, size:l.size, qty:actualQty});
+
+  renderPressCart();
   renderPressResFill();
-  populatePressResFillDropdown();
 }
 
 function pressResAddAll(resId) {
-  const lines = [...getResLines(resId)];
+  const lines = getResLines(resId);
   lines.forEach((l, idx) => {
     const item = getItem(l.type, l.brand, l.style, l.color, l.size);
     if(!item) return;
+    const used      = pendingUsed(resId, l);
+    const remaining = l.qty - used;
+    if(remaining < 1) return;
     const inCart = pressCart.filter(c=>c.type===l.type&&c.brand===l.brand&&c.style===l.style&&c.color===l.color&&c.size===l.size).reduce((s,c)=>s+c.qty,0);
-    if(itemTotalQty(item) - inCart < l.qty) return;
+    const stockAvail = itemTotalQty(item) - inCart;
+    const actualQty = Math.min(remaining, stockAvail);
+    if(actualQty < 1) return;
     const lotsClone = item.lots.map(x=>({...x})).sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
-    let remaining=l.qty, totalCost=0, hasCost=false;
-    lotsClone.forEach(lot=>{ if(remaining<=0||lot.qty<=0) return; const take=Math.min(lot.qty,remaining); if(lot.cost!=null){totalCost+=take*lot.cost;hasCost=true;} remaining-=take; });
-    pressCart.push({type:l.type,brand:l.brand,style:l.style||'',color:l.color,size:l.size,qty:l.qty,blankCost:hasCost?Math.round(totalCost*100)/100:null,itemKey:`${l.type}|${l.brand}|${l.style}|${l.color}|${l.size}`});
-    deductFromReservation(resId, l, l.qty);
+    let rem=actualQty, totalCost=0, hasCost=false;
+    lotsClone.forEach(lot=>{ if(rem<=0||lot.qty<=0) return; const take=Math.min(lot.qty,rem); if(lot.cost!=null){totalCost+=take*lot.cost;hasCost=true;} rem-=take; });
+    pressCart.push({type:l.type,brand:l.brand,style:l.style||'',color:l.color,size:l.size,qty:actualQty,blankCost:hasCost?Math.round(totalCost*100)/100:null,itemKey:`${l.type}|${l.brand}|${l.style}|${l.color}|${l.size}`,fromRes:resId});
+    pressResUsage.push({resId, type:l.type, brand:l.brand, style:l.style||'', color:l.color, size:l.size, qty:actualQty});
   });
   renderPressCart();
   renderPressResFill();
-  populatePressResFillDropdown();
 }
 
 function deductFromReservation(resId, line, qty) {
@@ -3209,7 +3233,8 @@ function showPressCost() {
   document.getElementById('press-cost-val').textContent = costText;
 }
 // ── PRESS ORDER CART ───────────────────────────────────────────────
-let pressCart = []; // [{type,brand,style,color,size,qty,blankCost,invItem}]
+let pressCart = []; // [{type,brand,style,color,size,qty,blankCost,itemKey}]
+let pressResUsage = []; // [{resId,type,brand,style,color,size,qty}] — pending, applied on submit only
 
 function renderPressCart() {
   const cartEl    = document.getElementById('press-cart');
@@ -3246,6 +3271,16 @@ function renderPressCart() {
 }
 
 function removePressLine(idx) {
+  const line = pressCart[idx];
+  // If this line came from a reservation, return its pending usage
+  if(line && line.fromRes) {
+    const uIdx = pressResUsage.findIndex(u=>u.resId===line.fromRes&&u.type===line.type&&u.brand===line.brand&&u.style===line.style&&u.color===line.color&&u.size===line.size);
+    if(uIdx !== -1) {
+      pressResUsage[uIdx].qty -= line.qty;
+      if(pressResUsage[uIdx].qty <= 0) pressResUsage.splice(uIdx, 1);
+    }
+    renderPressResFill();
+  }
   pressCart.splice(idx, 1);
   renderPressCart();
 }
@@ -3341,6 +3376,14 @@ function submitPressOrder() {
 
   save(); saveLog();
   if(shop&&!customShops.includes(shop)) { customShops.push(shop); saveOptions(); }
+
+  // Now permanently apply reservation deductions
+  pressResUsage.forEach(u => {
+    deductFromReservation(u.resId, u, u.qty);
+  });
+  pressResUsage = [];
+  renderWorkingResBar();
+  updateInvReserveBtn();
 
   const totalQty  = pressCart.reduce((s,l)=>s+l.qty, 0);
   const totalCost = pressCart.reduce((s,l)=>s+(l.blankCost??0), 0);
