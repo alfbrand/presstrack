@@ -194,6 +194,12 @@
     .cart-item-cost { font-size:12px; color:var(--text2); min-width:70px; text-align:right; }
     .cart-empty { text-align:center; padding:1.25rem; color:var(--text3); font-size:13px; border:0.5px dashed var(--border2); border-radius:var(--radius); }
 
+    /* EDIT INVENTORY MODAL */
+    #edit-inv-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; align-items:flex-start; justify-content:center; padding:1rem; overflow-y:auto; }
+    #edit-inv-overlay.open { display:flex; }
+    #edit-inv-panel { background:var(--bg); border-radius:var(--radius-lg); padding:1.5rem; width:100%; max-width:520px; border:0.5px solid var(--border); margin:auto; }
+    #edit-inv-panel h2 { font-size:16px; font-weight:600; margin-bottom:0.25rem; }
+
     /* EDIT LOG MODAL */
     #edit-log-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; align-items:flex-start; justify-content:center; padding:1rem; overflow-y:auto; }
     #edit-log-overlay.open { display:flex; }
@@ -786,6 +792,58 @@
       </div>
       <hr class="divider">
       <button class="btn btn-primary" id="res-submit-btn" style="display:none" onclick="submitReservation()">Save reservation</button>
+    </div>
+  </div>
+</div>
+
+<!-- EDIT INVENTORY ITEM MODAL -->
+<div id="edit-inv-overlay" onclick="closeEditInvIfOutside(event)">
+  <div id="edit-inv-panel">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.25rem">
+      <h2>Edit inventory item</h2>
+      <button class="btn-icon" onclick="closeEditInv()">✕</button>
+    </div>
+    <p class="edit-log-meta" id="edit-inv-meta"></p>
+
+    <p class="sub-label">Identity</p>
+    <div class="g2" style="margin-bottom:12px">
+      <div class="field">
+        <span class="label">Type</span>
+        <select id="edit-inv-type"></select>
+      </div>
+      <div class="field">
+        <span class="label">Brand</span>
+        <select id="edit-inv-brand" onchange="onEditInvBrandChange()"></select>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:12px">
+      <div class="field">
+        <span class="label">Style / SKU</span>
+        <select id="edit-inv-style"></select>
+      </div>
+      <div class="field">
+        <span class="label">Color</span>
+        <select id="edit-inv-color"></select>
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:16px;max-width:160px">
+      <span class="label">Size</span>
+      <select id="edit-inv-size">
+        <option>XS</option><option>S</option><option>M</option><option>L</option>
+        <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>One size</option>
+      </select>
+    </div>
+
+    <p class="sub-label">Purchase lots <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">— edit cost per lot</span></p>
+    <div id="edit-inv-lots" style="margin-bottom:16px"></div>
+
+    <div id="edit-inv-alert"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <div style="display:flex;gap:8px;flex-wrap:wrap">
+        <button class="btn btn-primary" onclick="saveEditInv()">Save changes</button>
+        <button class="btn" onclick="closeEditInv()">Cancel</button>
+      </div>
+      <button class="btn btn-danger btn-sm" onclick="removeItemFromEditModal()">Remove item</button>
     </div>
   </div>
 </div>
@@ -1781,7 +1839,134 @@ function populateAddDropdowns() {
   document.getElementById('style-hint').textContent = 'Select a brand first';
 }
 
-// ── RESERVATIONS ───────────────────────────────────────────────────
+// ── EDIT INVENTORY ITEM ────────────────────────────────────────────
+function openEditInv(t, b, st, c, s) {
+  const item = getItem(t, b, st, c, s);
+  if(!item) return;
+
+  // Store original key so we can find the item on save
+  document.getElementById('edit-inv-overlay').dataset.origKey = `${t}||${b}||${st}||${c}||${s}`;
+
+  // Meta line
+  document.getElementById('edit-inv-meta').textContent =
+    `${b}${st?' '+st:''} · ${c} · ${s} · ${itemTotalQty(item)} units`;
+
+  // Populate identity dropdowns
+  buildComboSelect('edit-inv-type',  'type',  customTypes,  t);
+  buildComboSelect('edit-inv-brand', 'brand', customBrands, b);
+  onEditInvBrandChange(b, st);
+  buildComboSelect('edit-inv-color', 'color', customColors, c);
+  document.getElementById('edit-inv-size').value = s;
+
+  // Populate lots editor
+  renderEditInvLots(item);
+
+  document.getElementById('edit-inv-alert').innerHTML = '';
+  document.getElementById('edit-inv-overlay').classList.add('open');
+}
+
+function onEditInvBrandChange(brand, currentStyle) {
+  const sel   = document.getElementById('edit-inv-brand');
+  const b     = brand || sel.value;
+  const styles = stylesForBrand(b);
+  buildComboSelect('edit-inv-style', 'style', styles, currentStyle || '');
+}
+
+function renderEditInvLots(item) {
+  const el = document.getElementById('edit-inv-lots');
+  if(!item.lots || !item.lots.length) { el.innerHTML='<p style="font-size:13px;color:var(--text3)">No lots on record.</p>'; return; }
+  el.innerHTML = item.lots.map((lot, idx) => {
+    const dateStr = lot.isoDate
+      ? new Date(lot.isoDate).getTime() === 0
+        ? 'Legacy (migrated)'
+        : new Date(lot.isoDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+      : '—';
+    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius);margin-bottom:6px;flex-wrap:wrap">
+      <span style="font-size:12px;color:var(--text2);flex:1;min-width:120px">${dateStr} · <strong>${lot.qty}</strong> unit${lot.qty!==1?'s':''}</span>
+      <div style="display:flex;align-items:center;gap:6px">
+        <span style="font-size:12px;color:var(--text2)">Cost/unit:</span>
+        <div class="input-prefix" style="width:auto">
+          <span>$</span>
+          <input type="number" class="edit-inv-lot-cost" data-lot-idx="${idx}" min="0" step="0.01"
+            value="${lot.cost!=null?lot.cost:''}" placeholder="—"
+            style="width:80px;border:none;border-radius:0;padding:5px 8px;font-size:13px;background:var(--bg);color:var(--text)">
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function saveEditInv() {
+  const origKey = document.getElementById('edit-inv-overlay').dataset.origKey;
+  const [origT, origB, origSt, origC, origS] = origKey.split('||');
+  const item = getItem(origT, origB, origSt, origC, origS);
+  if(!item) return;
+
+  const newType  = normalizeType(document.getElementById('edit-inv-type').value);
+  const newBrand = normalizeBrand(document.getElementById('edit-inv-brand').value);
+  const newStyle = normalizeStyle(document.getElementById('edit-inv-style').value);
+  const newColor = document.getElementById('edit-inv-color').value;
+  const newSize  = document.getElementById('edit-inv-size').value;
+  const alertEl  = document.getElementById('edit-inv-alert');
+
+  if(!newType||!newBrand||!newColor||!newSize) {
+    alertEl.innerHTML='<div class="alert alert-error">Type, brand, color, and size are required.</div>';
+    return;
+  }
+
+  // Check if new identity conflicts with a different existing item
+  const conflict = getItem(newType, newBrand, newStyle||'', newColor, newSize);
+  if(conflict && conflict !== item) {
+    alertEl.innerHTML='<div class="alert alert-error">Another inventory item already exists with this combination. Merge by removing one first.</div>';
+    return;
+  }
+
+  // Update lot costs
+  document.querySelectorAll('.edit-inv-lot-cost').forEach(input => {
+    const idx = parseInt(input.dataset.lotIdx);
+    const val = input.value;
+    if(item.lots[idx]) {
+      item.lots[idx].cost = val !== '' ? Math.round(parseFloat(val)*100)/100 : null;
+    }
+  });
+
+  // Update identity fields
+  item.type  = newType;
+  item.brand = newBrand;
+  item.style = newStyle || '';
+  item.color = newColor;
+  item.size  = newSize;
+
+  // Update catalog if new brand/style not already there
+  if(newBrand && !customBrands.includes(newBrand)) { customBrands.push(newBrand); }
+  if(newStyle && newBrand) {
+    if(!brandStyles[newBrand]) brandStyles[newBrand] = [];
+    if(!brandStyles[newBrand].includes(newStyle)) brandStyles[newBrand].push(newStyle);
+  }
+
+  save(); saveOptions(); updateFilters(); renderCurrentInvView(); updateStats();
+  alertEl.innerHTML='<div class="alert alert-success">Changes saved.</div>';
+  setTimeout(()=>closeEditInv(), 900);
+}
+
+function removeItemFromEditModal() {
+  const origKey = document.getElementById('edit-inv-overlay').dataset.origKey;
+  const [t, b, st, c, s] = origKey.split('||');
+  const item = getItem(t, b, st, c, s);
+  if(!item) return;
+  const qty   = itemTotalQty(item);
+  const label = `${item.brand}${item.style?' '+item.style:''} ${item.color} ${item.size} (${item.type}) — ${qty} in stock`;
+  if(!confirm(`Remove this item?\n\n${label}\n\nThis cannot be undone.`)) return;
+  inventory = inventory.filter(i=>!(i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s));
+  save(); closeEditInv(); renderCurrentInvView(); updateStats(); updateFilters();
+}
+
+function closeEditInv() {
+  document.getElementById('edit-inv-overlay').classList.remove('open');
+}
+function closeEditInvIfOutside(e) {
+  if(e.target.id==='edit-inv-overlay') closeEditInv();
+}
 let resCart = []; // [{type,brand,style,color,size,qty}]
 
 function openReserveSlideout() {
@@ -2059,9 +2244,12 @@ function renderTable() {
     )
   );
 
-  // Preserve collapse state across re-renders
+  const isFiltered = !!(fb || fst || fc || fs || ft);
+
+  // Preserve collapse state across re-renders (ignored when filtered)
   const openTypes  = new Set(container._openTypes  || []);
   const openBrands = new Set(container._openBrands || []);
+  const openStyles = new Set(container._openStyles || []);
 
   container.innerHTML = '';
 
@@ -2070,7 +2258,7 @@ function renderTable() {
     const typeItems = Object.values(brands).flat();
     const typeQty   = typeItems.reduce((s,i)=>s+itemTotalQty(i), 0);
     const typeVal   = typeItems.reduce((s,i)=>s+itemStockValue(i), 0);
-    const isTypeOpen = openTypes.has(type);
+    const isTypeOpen = isFiltered || openTypes.has(type);
 
     const typeEl = document.createElement('div');
     typeEl.className = 'inv-type-group';
@@ -2101,13 +2289,12 @@ function renderTable() {
     });
 
     // Brand subgroups
-    const openStyles = new Set(container._openStyles || []);
     Object.keys(brands).sort().forEach(brand => {
       const items     = brands[brand];
       const brandKey  = `${type}::${brand}`;
       const brandQty  = items.reduce((s,i)=>s+itemTotalQty(i), 0);
       const brandVal  = items.reduce((s,i)=>s+itemStockValue(i), 0);
-      const isBrandOpen = openBrands.has(brandKey);
+      const isBrandOpen = isFiltered || openBrands.has(brandKey);
 
       // Group items by style within brand
       const styleGroups = {};
@@ -2151,7 +2338,7 @@ function renderTable() {
         const styleKey    = `${type}::${brand}::${style}`;
         const styleQty    = styleItems.reduce((s,i)=>s+itemTotalQty(i), 0);
         const styleVal    = styleItems.reduce((s,i)=>s+itemStockValue(i), 0);
-        const isStyleOpen = openStyles.has(styleKey);
+        const isStyleOpen = isFiltered || openStyles.has(styleKey);
 
         const styleGroup = document.createElement('div');
         styleGroup.className = 'inv-style-group';
@@ -2227,7 +2414,7 @@ function renderTable() {
             <td><button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">${watchIcon}</button></td>
             <td style="white-space:nowrap">
               <button class="btn btn-sm" onclick="createOrderFromSKU('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')" title="Create press order for this SKU" ${avail<1?'disabled style="opacity:0.4"':''}>Order</button>
-              <button class="btn btn-danger btn-sm" onclick="removeItem('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">Remove</button>
+              <button class="btn btn-sm" onclick="openEditInv('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">Edit</button>
             </td>`;
           tbody.appendChild(tr);
         });
