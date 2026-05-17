@@ -2495,7 +2495,7 @@ function renderTable() {
         tbl.innerHTML = `<thead><tr>
           <th>Color</th><th>Size</th><th>Qty</th>
           <th>Cost/unit</th><th>Stock value</th><th>Status</th>
-          <th title="Watch for reorder">🔔</th><th></th>
+          <th style="text-align:right"></th>
         </tr></thead>`;
 
         const tbody = document.createElement('tbody');
@@ -2530,8 +2530,8 @@ function renderTable() {
             <td style="font-size:12px">${costStr}${lotLabel}</td>
             <td style="color:var(--text2)">${svStr}</td>
             <td>${badge}</td>
-            <td><button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">${watchIcon}</button></td>
-            <td style="white-space:nowrap">
+            <td style="white-space:nowrap;text-align:right">
+              <button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">${watchIcon}</button>
               <button class="btn btn-sm" onclick="createOrderFromSKU('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')" title="Create press order for this SKU" ${avail<1?'disabled style="opacity:0.4"':''}>Order</button>
               <button class="btn btn-sm" onclick="quickReserve('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')" title="Add to working reservation" ${avail<1?'disabled style="opacity:0.4"':''}>Reserve</button>
               <button class="btn btn-sm" onclick="openEditInv('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">Edit</button>
