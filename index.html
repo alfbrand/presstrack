@@ -274,6 +274,8 @@
     .inv-table .col-color    { width:18%; }
     .inv-table .col-size     { width:8%; }
     .inv-table .col-qty      { width:6%; }
+    .inv-table td.qty-cell   { white-space:nowrap; overflow:hidden; }
+    .inv-table tr:hover td.qty-cell { overflow:visible; position:relative; z-index:2; white-space:nowrap; }
     .inv-table .col-cost     { width:18%; }
     .inv-table .col-value    { width:12%; }
     .inv-table .col-status   { width:6%; }
@@ -2561,7 +2563,7 @@ function renderTable() {
           tr.innerHTML = `
             <td title="${i.color}">${i.color}</td>
             <td style="font-weight:600">${i.size}</td>
-            <td>${qtyDisplay}</td>
+            <td class="qty-cell">${qtyDisplay}</td>
             <td style="font-size:12px">${costStr}${lotLabel}</td>
             <td style="color:var(--text2)">${svStr}</td>
             <td>${badge}</td>
