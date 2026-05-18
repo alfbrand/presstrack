@@ -2613,20 +2613,37 @@ function renderReorderPanel() {
   if(!watched.length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
   const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
   watched.sort((a,b) => itemTotalQty(a) - itemTotalQty(b) || a.brand.localeCompare(b.brand));
-  let html = `<div class="reorder-panel">
-    <h3>${lucideIcon('bell', 14)} Reorder needed — ${watched.length} SKU${watched.length>1?'s':''} low or out</h3>`;
+
+  // Preserve collapsed state across re-renders
+  const wasOpen = panel._reorderOpen || false;
+
+  let itemsHtml = '';
   watched.forEach(i => {
     const qty = itemTotalQty(i);
     const statusText = qty === 0 ? 'OUT OF STOCK' : `${qty} left`;
     const statusColor = qty === 0 ? 'var(--danger-text)' : 'var(--warn-text)';
-    html += `<div class="reorder-item">
+    itemsHtml += `<div class="reorder-item">
       <div class="reorder-item-name">${i.brand}${i.style?' <span class="style-tag">'+i.style+'</span>':''} ${i.color} ${i.size} <span style="color:var(--text2);font-weight:400;font-size:12px">(${i.type})</span></div>
       <div class="reorder-item-qty" style="color:${statusColor}">${statusText}</div>
     </div>`;
   });
-  html += '</div>';
-  panel.innerHTML = html;
+
+  panel.innerHTML = `<div class="reorder-panel">
+    <h3 onclick="toggleReorderPanel()" style="cursor:pointer;user-select:none;margin-bottom:${wasOpen?'10px':'0'}">
+      ${lucideIcon('bell', 14)}
+      Reorder needed — ${watched.length} SKU${watched.length>1?'s':''} low or out
+      <span style="margin-left:auto;font-size:11px;opacity:0.6">${wasOpen?'▼':'▶'}</span>
+    </h3>
+    <div id="reorder-items" style="display:${wasOpen?'block':'none'}">${itemsHtml}</div>
+  </div>`;
   panel.style.display = 'block';
+}
+
+function toggleReorderPanel() {
+  const panel = document.getElementById('reorder-panel');
+  if(!panel) return;
+  panel._reorderOpen = !panel._reorderOpen;
+  renderReorderPanel();
 }
 
 function removeItem(t,b,st,c,s) {
