@@ -275,8 +275,9 @@
     .inv-table .col-size     { width:8%; }
     .inv-table .col-qty      { width:6%; }
     .inv-table td.qty-cell   { white-space:nowrap; overflow:hidden; position:relative; }
-    .inv-table td.qty-cell .qty-inner { display:block; overflow:hidden; text-overflow:clip; white-space:nowrap; }
-    .inv-table tr:hover td.qty-cell .qty-inner { position:absolute; top:50%; transform:translateY(-50%); left:10px; white-space:nowrap; background:var(--bg2); padding:2px 8px 2px 4px; border-radius:var(--radius); box-shadow:0 2px 8px rgba(0,0,0,0.12); z-index:10; }
+    .inv-table td.qty-cell .qty-inner { display:block; overflow:hidden; white-space:nowrap; }
+    .inv-table td.qty-cell.qty-overflow .qty-inner { cursor:default; }
+    .inv-table tr:hover td.qty-cell.qty-overflow .qty-inner { position:absolute; top:50%; transform:translateY(-50%); left:4px; white-space:nowrap; background:var(--bg); border:0.5px solid var(--border2); padding:3px 10px 3px 6px; border-radius:var(--radius); box-shadow:0 4px 16px rgba(0,0,0,0.18); z-index:9999; }
     .inv-table .col-cost     { width:18%; }
     .inv-table .col-value    { width:12%; }
     .inv-table .col-status   { width:6%; }
@@ -2564,7 +2565,7 @@ function renderTable() {
           tr.innerHTML = `
             <td title="${i.color}">${i.color}</td>
             <td style="font-weight:600">${i.size}</td>
-            <td class="qty-cell"><span class="qty-inner">${qtyDisplay}</span></td>
+            <td class="qty-cell${reserved > 0 ? ' qty-overflow' : ''}"><span class="qty-inner">${qtyDisplay}</span></td>
             <td style="font-size:12px">${costStr}${lotLabel}</td>
             <td style="color:var(--text2)">${svStr}</td>
             <td>${badge}</td>
