@@ -277,7 +277,7 @@
     .inv-table td.qty-cell   { white-space:nowrap; }
     .inv-table .col-cost     { width:18%; }
     .inv-table .col-value    { width:12%; }
-    .inv-table .col-status   { width:6%; }
+    .inv-table .col-status   { width:14%; }
     .inv-table .col-actions  { width:32%; }
 
     /* INVENTORY PIVOT GRIDS */
@@ -2542,10 +2542,10 @@ function renderTable() {
           const badge = avail===0 ? '<span class="badge badge-zero">Out</span>'
                       : avail<=lowThreshold ? '<span class="badge badge-low">Low</span>'
                       : '<span class="badge badge-ok">In stock</span>';
-          const qtyTitle = reserved > 0 ? `${qty} in stock · ${reserved} reserved · ${avail} available` : '';
-          const qtyDisplay = reserved > 0
-            ? `<span style="font-weight:600">${avail}<span style="color:var(--warn-text)">*</span></span>`
-            : `<span style="font-weight:600">${qty}</span>`;
+          const statusCell = reserved > 0
+            ? `${badge}<div style="font-size:11px;color:var(--warn-text);font-weight:600;margin-top:2px;white-space:nowrap">${avail} avail · ${reserved} res.</div>`
+            : badge;
+          const qtyDisplay = `<span style="font-weight:600">${qty}</span>`;
           const range   = itemCostRange(i);
           const sv      = itemStockValue(i);
           const svStr   = sv>0 ? '$'+sv.toFixed(2) : '—';
@@ -2563,10 +2563,10 @@ function renderTable() {
           tr.innerHTML = `
             <td title="${i.color}">${i.color}</td>
             <td style="font-weight:600">${i.size}</td>
-            <td class="qty-cell"${reserved > 0 ? ` title="${qtyTitle}"` : ''}>${qtyDisplay}</td>
+            <td class="qty-cell">${qtyDisplay}</td>
             <td style="font-size:12px">${costStr}${lotLabel}</td>
             <td style="color:var(--text2)">${svStr}</td>
-            <td>${badge}</td>
+            <td>${statusCell}</td>
             <td style="white-space:nowrap;text-align:right">
               <button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">${watchIcon}</button>
               <button class="btn btn-sm" onclick="createOrderFromSKU('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')" title="Create press order for this SKU" ${avail<1?'disabled style="opacity:0.4"':''}>Press it</button>
