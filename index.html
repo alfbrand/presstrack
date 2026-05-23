@@ -3256,7 +3256,7 @@ function populatePressDropdowns() {
 
   buildComboSelect('press-shop','shop',customShops,'');
   document.getElementById('press-shop').onchange=function(){ handleCombo('shop'); };
-  buildSimpleSelect('press-type','type',[...new Set(inventory.map(i=>i.type))]);
+  buildSimpleSelect('press-type','type',[...new Set(inventory.filter(i=>availableQty(i)>0).map(i=>i.type))]);
   ['press-brand','press-color','press-size'].forEach(id=>document.getElementById(id).innerHTML=`<option value="">Select ${id.replace('press-','')}</option>`);
   const ps=document.getElementById('press-style'); ps.innerHTML='<option value="">Select style</option>'; ps.disabled=true;
   document.getElementById('press-style-hint').textContent='Select a brand first';
@@ -3264,7 +3264,8 @@ function populatePressDropdowns() {
 }
 function updatePressType() {
   const type=document.getElementById('press-type').value;
-  buildSimpleSelect('press-brand','brand',[...new Set(inventory.filter(i=>i.type===type).map(i=>i.brand))]);
+  const availItems = inventory.filter(i=>i.type===type && availableQty(i)>0);
+  buildSimpleSelect('press-brand','brand',[...new Set(availItems.map(i=>i.brand))]);
   ['press-style','press-color','press-size'].forEach(id=>document.getElementById(id).innerHTML=`<option value="">Select ${id.replace('press-','')}</option>`);
   const ps=document.getElementById('press-style'); ps.disabled=true;
   document.getElementById('press-style-hint').textContent='Select a brand first';
@@ -3272,7 +3273,8 @@ function updatePressType() {
 }
 function updatePressBrand() {
   const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value;
-  const styles=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand).map(i=>i.style).filter(Boolean))].sort();
+  const availItems = inventory.filter(i=>i.type===type&&i.brand===brand && availableQty(i)>0);
+  const styles=[...new Set(availItems.map(i=>i.style).filter(Boolean))].sort();
   const ps=document.getElementById('press-style'), hint=document.getElementById('press-style-hint');
   if(styles.length) { ps.disabled=false; buildSimpleSelect('press-style','style',styles); hint.textContent=`${styles.length} style${styles.length>1?'s':''} for ${brand}`; }
   else { ps.disabled=true; ps.innerHTML='<option value="">No styles on record</option>'; hint.textContent='No styles for this brand in inventory'; }
@@ -3282,7 +3284,8 @@ function updatePressBrand() {
 }
 function updatePressStyle() {
   const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value, style=document.getElementById('press-style').value;
-  const colors=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style).map(i=>i.color))].sort();
+  const availItems = inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style && availableQty(i)>0);
+  const colors=[...new Set(availItems.map(i=>i.color))].sort();
   buildSimpleSelect('press-color','color',colors);
   document.getElementById('press-size').innerHTML='<option value="">Select size</option>';
   document.getElementById('press-cost-preview').style.display='none';
@@ -3291,7 +3294,8 @@ function updatePressColor() {
   const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value;
   const style=document.getElementById('press-style').value, color=document.getElementById('press-color').value;
   const sizeOrder=['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
-  const sizes=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style&&i.color===color).map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
+  const availItems = inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style&&i.color===color && availableQty(i)>0);
+  const sizes=[...new Set(availItems.map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
   document.getElementById('press-size').innerHTML='<option value="">Select size</option>'+sizes.map(s=>`<option>${s}</option>`).join('');
   document.getElementById('press-cost-preview').style.display='none';
 }
