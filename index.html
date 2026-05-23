@@ -243,6 +243,12 @@
     .rpt-collapse-header-text { font-weight:600; font-size:13px; flex:1; }
     .rpt-collapse-body { overflow:auto; }
 
+    /* REPORT SUB-TABS */
+    .sub-tabs { display:flex; gap:0; border-bottom:0.5px solid var(--border); margin-bottom:1.5rem; }
+    .sub-tab { padding:8px 16px; font-size:13px; cursor:pointer; border:none; background:none; color:var(--text2); border-bottom:2px solid transparent; margin-bottom:-0.5px; white-space:nowrap; font-family:var(--font); }
+    .sub-tab.active { color:var(--text); border-bottom-color:var(--text); font-weight:500; }
+    .sub-tab:hover:not(.active) { color:var(--text); }
+
     /* PRINT */
     @media print {
       #topbar, .tabs, #report-controls, button, select, input { display: none !important; }
@@ -739,25 +745,38 @@
 
     <!-- ── REPORTS ── -->
     <div id="tab-reports" style="display:none">
-      <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:1.5rem" id="report-controls">
-        <div class="field" style="flex:0 0 auto">
-          <span class="label">Month</span>
-          <input type="month" id="report-month" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+      <div class="sub-tabs">
+        <button class="sub-tab active" id="rpt-sub-monthly" onclick="showReportSubTab('monthly')">Monthly Report</button>
+        <button class="sub-tab" id="rpt-sub-popularity" onclick="showReportSubTab('popularity')">Popularity</button>
+      </div>
+
+      <!-- Monthly Report sub-tab -->
+      <div id="rpt-view-monthly">
+        <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:1.5rem" id="report-controls">
+          <div class="field" style="flex:0 0 auto">
+            <span class="label">Month</span>
+            <input type="month" id="report-month" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+          </div>
+          <div class="field" style="flex:0 0 auto">
+            <span class="label">Shop</span>
+            <select id="report-shop" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);min-width:140px">
+              <option value="">All shops</option>
+            </select>
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-end">
+            <button class="btn btn-primary" onclick="renderReports()">Run report</button>
+            <button class="btn" onclick="exportReportCSV()">Download CSV</button>
+            <button class="btn" onclick="printReport()">Print / Save PDF</button>
+          </div>
         </div>
-        <div class="field" style="flex:0 0 auto">
-          <span class="label">Shop</span>
-          <select id="report-shop" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);min-width:140px">
-            <option value="">All shops</option>
-          </select>
-        </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-end">
-          <button class="btn btn-primary" onclick="renderReports()">Run report</button>
-          <button class="btn" onclick="exportReportCSV()">Download CSV</button>
-          <button class="btn" onclick="printReport()">Print / Save PDF</button>
+        <div id="report-content">
+          <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a month and click Run report.</p>
         </div>
       </div>
-      <div id="report-content">
-        <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a month and click Run report.</p>
+
+      <!-- Popularity sub-tab -->
+      <div id="rpt-view-popularity" style="display:none">
+        <div id="popularity-content"></div>
       </div>
     </div>
   </div><!-- /main -->
@@ -4069,19 +4088,30 @@ function toggleRptSection(id) {
   if(hdr) hdr.classList.toggle('has-open-body', !isOpen);
 }
 
+let reportSubTab = 'monthly';
+
+function showReportSubTab(tab) {
+  reportSubTab = tab;
+  document.querySelectorAll('.sub-tab').forEach(el => el.classList.remove('active'));
+  document.getElementById(`rpt-sub-${tab}`).classList.add('active');
+  document.getElementById('rpt-view-monthly').style.display    = tab === 'monthly'    ? '' : 'none';
+  document.getElementById('rpt-view-popularity').style.display = tab === 'popularity' ? '' : 'none';
+  if(tab === 'popularity') renderPopularity();
+}
+
 function initReports() {
   const inp = document.getElementById('report-month');
   if(!inp.value) {
     const now = new Date();
     inp.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
   }
-  // Populate shop filter from all known shops
   const shopSel = document.getElementById('report-shop');
   const cur = shopSel.value;
   const shops = [...new Set([...customShops, ...orderLog.map(o=>o.shop).filter(Boolean)])].sort();
   shopSel.innerHTML = '<option value="">All shops</option>' +
     shops.map(s=>`<option value="${s}"${s===cur?' selected':''}>${s}</option>`).join('');
-  renderReports();
+  if(reportSubTab === 'monthly') renderReports();
+  else renderPopularity();
 }
 
 function parseMonth(monthVal) {
@@ -4230,19 +4260,31 @@ function renderReports() {
   }
   html += `</div></div>`;
 
-  // ── Dashboard: popularity from ALL-TIME order log ───────────────
-  html += `<div style="margin-bottom:0.5rem"><h3 style="font-size:15px;font-weight:700;margin-bottom:0.25rem">Popularity dashboard — all time</h3>
-    <p style="font-size:12px;color:var(--text2);margin-bottom:1rem">Based on total units pressed across all orders.</p></div>`;
-  html += `<div class="rpt-two-col">`;
+  html += `</div>`; // close report-printable
 
+  document.getElementById('report-content').innerHTML = html;
+}
+
+function renderPopularity() {
   const dash = [
-    { label:'Top brands',  key:'brand' },
-    { label:'Top colors',  key:'color' },
-    { label:'Top sizes',   key:'size'  },
-    { label:'Top types',   key:'type'  },
-    { label:'Top shops',   key:'shop'  },
-    { label:'Top styles',  key:'style' },
+    { label:'Top brands', key:'brand' },
+    { label:'Top colors', key:'color' },
+    { label:'Top sizes',  key:'size'  },
+    { label:'Top types',  key:'type'  },
+    { label:'Top shops',  key:'shop'  },
+    { label:'Top styles', key:'style' },
   ];
+
+  if(!orderLog.length) {
+    document.getElementById('popularity-content').innerHTML =
+      `<p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">No orders logged yet — press some shirts first.</p>`;
+    return;
+  }
+
+  let html = `<div style="margin-bottom:1rem">
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:0.25rem">Popularity — all time</h3>
+    <p style="font-size:12px;color:var(--text2)">Based on total units pressed across all orders.</p>
+  </div><div class="rpt-two-col">`;
 
   dash.forEach(({label, key}) => {
     const counts = {};
@@ -4268,9 +4310,8 @@ function renderReports() {
     html += `</div>`;
   });
 
-  html += `</div></div>`; // close rpt-two-col + report-printable
-
-  document.getElementById('report-content').innerHTML = html;
+  html += `</div>`;
+  document.getElementById('popularity-content').innerHTML = html;
 }
 
 // ── REPORT EXPORTS ─────────────────────────────────────────────────
