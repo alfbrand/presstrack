@@ -1,6 +1,6 @@
 # PressTrack
 
-Inventory and press order manager built for screen printing businesses. Track your blank stock, log press orders, manage reservations, and run monthly reports — all in a single HTML file that runs in any browser.
+Inventory and order manager built for decorated apparel businesses — screen printing, embroidery, DTG, heat transfer, vinyl, and beyond. Track your blank stock, log production orders, manage reservations, and run monthly reports — all in a single HTML file that runs in any browser.
 
 ---
 
