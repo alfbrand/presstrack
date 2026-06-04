@@ -1240,8 +1240,20 @@ function migrateInventory() {
   // One-time lot migration: items without lots get a single lot from their legacy qty/cost
   inventory.forEach(item => {
     if(!item.lots) {
-      item.lots = [{ qty: item.qty, cost: item.cost ?? null, isoDate: new Date(0).toISOString() }];
+      item.lots = [{ qty: item.qty, origQty: item.qty, cost: item.cost ?? null, isoDate: new Date(0).toISOString() }];
     }
+    // Seed origQty on any lot that's missing it
+    item.lots.forEach(lot => {
+      if(lot.origQty == null) {
+        const match = stockLog.find(e =>
+          e.isoDate === lot.isoDate &&
+          e.type  === item.type  && e.brand === item.brand &&
+          e.style === item.style && e.color === item.color &&
+          e.size  === item.size
+        );
+        lot.origQty = match ? match.qty : lot.qty;
+      }
+    });
     item.qty = item.lots.reduce((s,l)=>s+l.qty, 0);
   });
 }
@@ -3079,7 +3091,7 @@ function addBulkStock() {
   const now = new Date();
   entries.forEach(({size, qty, cost}) => {
     const existing = getItem(type, brand, style||'', color, size);
-    const lot = { qty, cost, isoDate: now.toISOString() };
+    const lot = { qty, origQty: qty, cost, isoDate: now.toISOString(), supplier, supplierOrder };
     if(existing) {
       existing.lots.push(lot);
       existing.qty = itemTotalQty(existing);
@@ -3089,17 +3101,6 @@ function addBulkStock() {
     added++;
   });
   save(); updateFilters();
-  entries.forEach(({size, qty, cost}) => {
-    stockLog.unshift({
-      id: Date.now() + Math.random(),
-      isoDate: now.toISOString(),
-      date: now.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
-      type, brand, style:style||'', color, size, qty,
-      cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null,
-      supplier, supplierOrder
-    });
-  });
-  saveStockLog();
   const totalQty = entries.reduce((s,e)=>s+e.qty, 0);
   const sizeList = entries.map(e=>`${e.size}×${e.qty}${e.cost!=null?' ($'+e.cost.toFixed(2)+')':''}`).join(', ');
   el.innerHTML=`<div class="alert alert-success">Added ${totalQty} units across ${added} size${added>1?'s':''} for ${brand}${style?' '+style:''} ${color} (${type})${supplier?' via '+supplier:''}: ${sizeList}.</div>`;
@@ -3136,19 +3137,10 @@ function addStock() {
   }
   if(supplier && !customSuppliers.includes(supplier)) { customSuppliers.push(supplier); saveOptions(); }
   const existing=getItem(type,brand,style||'',color,size);
-  const lot = { qty, cost, isoDate: new Date().toISOString() };
+  const lot = { qty, origQty: qty, cost, isoDate: new Date().toISOString(), supplier, supplierOrder };
   if(existing) { existing.lots.push(lot); existing.qty = itemTotalQty(existing); }
   else { inventory.push({type,brand,style:style||'',color,size,qty,lots:[lot]}); }
   save(); updateFilters();
-  stockLog.unshift({
-    id: Date.now(),
-    isoDate: new Date().toISOString(),
-    date: new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
-    type, brand, style:style||'', color, size, qty,
-    cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null,
-    supplier, supplierOrder
-  });
-  saveStockLog();
   el.innerHTML=`<div class="alert alert-success">Added ${qty}× ${brand}${style?' '+style:''} ${color} ${size} (${type})${cost!=null?' at $'+cost.toFixed(2)+'/unit':''}${supplier?' via '+supplier:''}.</div>`;
   setTimeout(()=>{ el.innerHTML=''; closeSlideout('add'); updateStats(); updateFilters(); renderCurrentInvView(); }, 1800);
 }
@@ -4087,7 +4079,7 @@ function confirmCSVImport() {
       if(!brandStyles[brand].includes(style)) brandStyles[brand].push(style);
     }
     const existing = getItem(type, brand, style, color, size);
-    const lot = { qty, cost, isoDate: (r.parsedDate || new Date()).toISOString() };
+    const lot = { qty, origQty: qty, cost, isoDate: (r.parsedDate || new Date()).toISOString(), supplier: supplier||'', supplierOrder: supplierOrder||'' };
     if(existing) {
       existing.lots.push(lot);
       existing.qty = itemTotalQty(existing);
@@ -4096,20 +4088,9 @@ function confirmCSVImport() {
       inventory.push({type, brand, style:style||'', color, size, qty, lots:[lot]});
       added++;
     }
-    // Log the stock addition — use provided date or fall back to today
-    const entryDate = r.parsedDate || new Date();
-    stockLog.unshift({
-      id: Date.now() + Math.random(),
-      isoDate: entryDate.toISOString(),
-      date: entryDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
-      type, brand, style:style||'', color, size, qty,
-      cost, totalCost: cost!=null ? Math.round(cost*qty*100)/100 : null,
-      supplier: supplier||'', supplierOrder: supplierOrder||'',
-      source: 'csv'
-    });
   });
 
-  saveOptions(); save(); saveStockLog(); updateFilters();
+  saveOptions(); save(); updateFilters();
   window._csvPending = null;
 
   document.getElementById('csv-preview').innerHTML = '';
@@ -4184,7 +4165,34 @@ function renderReports() {
   const { start, end, label } = parseMonth(monthVal);
 
   const shopFilter = document.getElementById('report-shop').value;
-  const added   = stockLog.filter(e => inRange(e.isoDate, start, end));
+
+  // Build "added" from inventory.lots (source of truth)
+  const added = [];
+  inventory.forEach(item => {
+    (item.lots || []).forEach(lot => {
+      if(!inRange(lot.isoDate, start, end)) return;
+      added.push({
+        date: new Date(lot.isoDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+        isoDate: lot.isoDate,
+        type:  item.type, brand: item.brand, style: item.style,
+        color: item.color, size:  item.size,
+        qty:      lot.origQty ?? lot.qty,
+        cost:     lot.cost,
+        totalCost: lot.cost != null ? Math.round(lot.cost * (lot.origQty ?? lot.qty) * 100) / 100 : null,
+        supplier:      lot.supplier      || '',
+        supplierOrder: lot.supplierOrder || '',
+      });
+    });
+  });
+  // Also include any stockLog entries not yet in lots (legacy fallback)
+  stockLog.forEach(e => {
+    if(!inRange(e.isoDate, start, end)) return;
+    // Skip if already covered by a matching lot
+    const item = inventory.find(i => i.type===e.type && i.brand===e.brand && i.style===e.style && i.color===e.color && i.size===e.size);
+    const covered = item && item.lots.some(l => l.isoDate === e.isoDate);
+    if(!covered) added.push({ date: e.date, isoDate: e.isoDate, type: e.type, brand: e.brand, style: e.style, color: e.color, size: e.size, qty: e.qty, cost: e.cost, totalCost: e.totalCost, supplier: e.supplier||'', supplierOrder: e.supplierOrder||'' });
+  });
+
   const pressed = orderLog.filter(o => {
     const d = o.isoDate ? new Date(o.isoDate) : new Date(o.date);
     return d >= start && d < end && (!shopFilter || o.shop === shopFilter);
@@ -4228,10 +4236,19 @@ function renderReports() {
     </div>
   </div>`;
 
-  // ── Purchased detail table ──────────────────────────────────────
+  // ── Purchased detail table (grouped by SKU, lots expandable) ──────
+  // Group lots by SKU key
+  const skuGroups = {};
+  added.forEach(e => {
+    const key = `${e.type}||${e.brand}||${e.style||''}||${e.color}||${e.size}`;
+    if(!skuGroups[key]) skuGroups[key] = { type:e.type, brand:e.brand, style:e.style, color:e.color, size:e.size, lots:[] };
+    skuGroups[key].lots.push(e);
+  });
+  const skuCount = Object.keys(skuGroups).length;
+
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
     <div class="rpt-collapse-header" id="rpt-purchased-hdr" onclick="toggleRptSection('rpt-purchased')">
-      <span class="rpt-collapse-header-text">Inventory purchased this month (${added.length} entries)${shopFilter?' <span style=\"font-size:11px;color:var(--text2);font-weight:400\"> — stock additions are not shop-specific</span>':''}</span>
+      <span class="rpt-collapse-header-text">Inventory purchased this month (${skuCount} SKU${skuCount!==1?'s':''}, ${added.length} lot${added.length!==1?'s':''})</span>
       <span class="rpt-collapse-btn" id="rpt-purchased-btn">▶</span>
     </div>`;
   if(added.length) {
@@ -4243,9 +4260,43 @@ function renderReports() {
   }
   html += `<div class="rpt-collapse-body" id="rpt-purchased" style="display:none">`;
   if(added.length) {
-    html += `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Cost/unit</th><th>Total cost</th></tr></thead><tbody>`;
-    added.forEach(e => {
-      html += `<tr><td>${e.date}</td><td>${e.type}</td><td>${e.brand}</td><td>${e.style||'—'}</td><td>${e.color}</td><td>${e.size}</td><td>${e.qty}</td><td>${e.cost!=null?'$'+e.cost.toFixed(2):'—'}</td><td>${e.totalCost!=null?'$'+e.totalCost.toFixed(2):'—'}</td></tr>`;
+    const skuId = (key) => 'rpt-sku-' + key.replace(/[^a-z0-9]/gi,'_');
+    html += `<div style="overflow:auto"><table><thead><tr>
+      <th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Type</th>
+      <th>Lots</th><th>Total qty</th><th>Total cost</th><th></th>
+    </tr></thead><tbody>`;
+    Object.entries(skuGroups).forEach(([key, sku]) => {
+      const skuQty  = sku.lots.reduce((s,l)=>s+l.qty, 0);
+      const skuCost = sku.lots.reduce((s,l)=>s+(l.totalCost??0), 0);
+      const hasCost = sku.lots.some(l=>l.totalCost!=null);
+      const sid = skuId(key);
+      html += `<tr style="font-weight:500;background:var(--bg2)">
+        <td>${sku.brand}</td>
+        <td><span class="style-tag">${sku.style||'—'}</span></td>
+        <td>${sku.color}</td><td>${sku.size}</td><td style="color:var(--text2)">${sku.type}</td>
+        <td style="color:var(--text2)">${sku.lots.length}</td>
+        <td>${skuQty}</td>
+        <td>${hasCost?'$'+skuCost.toFixed(2):'—'}</td>
+        <td><button class="btn btn-sm" onclick="toggleRptSection('${sid}')">▶ Lots</button></td>
+      </tr>
+      <tr><td colspan="9" style="padding:0">
+        <div id="${sid}" style="display:none;padding:0 0 4px 0">
+          <table style="width:100%;font-size:12px">
+            <thead><tr style="background:var(--bg3)">
+              <th style="padding:5px 10px">Purchase date</th>
+              <th>Qty</th><th>Cost/unit</th><th>Total cost</th><th>Supplier</th><th>Order #</th>
+            </tr></thead><tbody>`;
+      sku.lots.forEach(l => {
+        html += `<tr>
+          <td style="padding:5px 10px;color:var(--text2)">${l.date}</td>
+          <td>${l.qty}</td>
+          <td>${l.cost!=null?'$'+l.cost.toFixed(2):'—'}</td>
+          <td>${l.totalCost!=null?'$'+l.totalCost.toFixed(2):'—'}</td>
+          <td style="color:var(--text2)">${l.supplier||'—'}</td>
+          <td style="color:var(--text2)">${l.supplierOrder||'—'}</td>
+        </tr>`;
+      });
+      html += `</tbody></table></div></td></tr>`;
     });
     html += `</tbody></table></div>`;
   } else {
