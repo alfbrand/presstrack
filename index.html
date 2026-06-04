@@ -2049,7 +2049,7 @@ function saveEditInv() {
     return;
   }
 
-  // Update lot dates and costs
+  // Update lot dates and costs, syncing back to stockLog entries
   document.querySelectorAll('.edit-inv-lot-cost').forEach(input => {
     const idx = parseInt(input.dataset.lotIdx);
     const val = input.value;
@@ -2061,9 +2061,28 @@ function saveEditInv() {
     const idx = parseInt(input.dataset.lotIdx);
     const val = input.value;
     if(item.lots[idx] && val) {
-      item.lots[idx].isoDate = new Date(val + 'T12:00:00').toISOString();
+      const oldIso = item.lots[idx].isoDate;
+      const newIso = new Date(val + 'T12:00:00').toISOString();
+      item.lots[idx].isoDate = newIso;
+
+      // Sync to matching stockLog entry by old isoDate + SKU
+      const match = stockLog.find(e =>
+        e.isoDate === oldIso &&
+        e.type  === item.type  && e.brand === item.brand &&
+        e.style === item.style && e.color === item.color &&
+        e.size  === item.size
+      );
+      if(match) {
+        match.isoDate = newIso;
+        match.date = new Date(newIso).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
+        if(item.lots[idx].cost != null) {
+          match.cost = item.lots[idx].cost;
+          match.totalCost = Math.round(item.lots[idx].cost * match.qty * 100) / 100;
+        }
+      }
     }
   });
+  saveStockLog();
 
   // Update identity fields
   item.type  = newType;
