@@ -4184,14 +4184,8 @@ function renderReports() {
       });
     });
   });
-  // Also include any stockLog entries not yet in lots (legacy fallback)
-  stockLog.forEach(e => {
-    if(!inRange(e.isoDate, start, end)) return;
-    // Skip if already covered by a matching lot
-    const item = inventory.find(i => i.type===e.type && i.brand===e.brand && i.style===e.style && i.color===e.color && i.size===e.size);
-    const covered = item && item.lots.some(l => l.isoDate === e.isoDate);
-    if(!covered) added.push({ date: e.date, isoDate: e.isoDate, type: e.type, brand: e.brand, style: e.style, color: e.color, size: e.size, qty: e.qty, cost: e.cost, totalCost: e.totalCost, supplier: e.supplier||'', supplierOrder: e.supplierOrder||'' });
-  });
+  // stockLog is kept in localStorage as a historical backup but no longer used for reports.
+  // inventory.lots is the sole source of truth.
 
   const pressed = orderLog.filter(o => {
     const d = o.isoDate ? new Date(o.isoDate) : new Date(o.date);
