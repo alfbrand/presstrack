@@ -1242,16 +1242,26 @@ function migrateInventory() {
     if(!item.lots) {
       item.lots = [{ qty: item.qty, origQty: item.qty, cost: item.cost ?? null, isoDate: new Date(0).toISOString() }];
     }
-    // Seed origQty on any lot that's missing it
+    // Seed origQty and supplier info from stockLog on any lot that's missing them
     item.lots.forEach(lot => {
+      // Find all stockLog entries for this SKU
+      const skuMatches = stockLog.filter(e =>
+        e.type  === item.type  && e.brand === item.brand &&
+        e.style === item.style && e.color === item.color &&
+        e.size  === item.size
+      );
+      // Prefer exact isoDate match; if only one stockLog entry exists use it as fallback
+      const exactMatch = skuMatches.find(e => e.isoDate === lot.isoDate);
+      const bestMatch  = exactMatch || (skuMatches.length === 1 ? skuMatches[0] : null);
+
       if(lot.origQty == null) {
-        const match = stockLog.find(e =>
-          e.isoDate === lot.isoDate &&
-          e.type  === item.type  && e.brand === item.brand &&
-          e.style === item.style && e.color === item.color &&
-          e.size  === item.size
-        );
-        lot.origQty = match ? match.qty : lot.qty;
+        lot.origQty = bestMatch ? bestMatch.qty : lot.qty;
+      }
+      if(bestMatch && !lot.supplier && bestMatch.supplier) {
+        lot.supplier = bestMatch.supplier;
+      }
+      if(bestMatch && !lot.supplierOrder && bestMatch.supplierOrder) {
+        lot.supplierOrder = bestMatch.supplierOrder;
       }
     });
     item.qty = item.lots.reduce((s,l)=>s+l.qty, 0);
