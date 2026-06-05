@@ -746,16 +746,35 @@
     <!-- ── REPORTS ── -->
     <div id="tab-reports" style="display:none">
       <div class="sub-tabs">
-        <button class="sub-tab active" id="rpt-sub-monthly" onclick="showReportSubTab('monthly')">Monthly Report</button>
+        <button class="sub-tab active" id="rpt-sub-inventory" onclick="showReportSubTab('inventory')">Inventory Report</button>
+        <button class="sub-tab" id="rpt-sub-press" onclick="showReportSubTab('press')">Press Report</button>
         <button class="sub-tab" id="rpt-sub-popularity" onclick="showReportSubTab('popularity')">Popularity</button>
       </div>
 
-      <!-- Monthly Report sub-tab -->
-      <div id="rpt-view-monthly">
+      <!-- Inventory Report sub-tab -->
+      <div id="rpt-view-inventory">
         <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:1.5rem" id="report-controls">
           <div class="field" style="flex:0 0 auto">
             <span class="label">Month</span>
             <input type="month" id="report-month" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+          </div>
+          <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-end">
+            <button class="btn btn-primary" onclick="renderReports()">Run report</button>
+            <button class="btn" onclick="exportReportCSV()">Download CSV</button>
+            <button class="btn" onclick="printReport()">Print / Save PDF</button>
+          </div>
+        </div>
+        <div id="report-inv-content">
+          <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a month and click Run report.</p>
+        </div>
+      </div>
+
+      <!-- Press Report sub-tab -->
+      <div id="rpt-view-press" style="display:none">
+        <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:1.5rem">
+          <div class="field" style="flex:0 0 auto">
+            <span class="label">Month</span>
+            <input type="month" id="report-month-press" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
           </div>
           <div class="field" style="flex:0 0 auto">
             <span class="label">Shop</span>
@@ -769,7 +788,7 @@
             <button class="btn" onclick="printReport()">Print / Save PDF</button>
           </div>
         </div>
-        <div id="report-content">
+        <div id="report-press-content">
           <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a month and click Run report.</p>
         </div>
       </div>
@@ -4148,30 +4167,44 @@ function toggleLotDetail(id, btn) {
   btn.textContent = isOpen ? '▶ Lots' : '▼ Lots';
 }
 
-let reportSubTab = 'monthly';
+let reportSubTab = 'inventory';
 
 function showReportSubTab(tab) {
   reportSubTab = tab;
   document.querySelectorAll('.sub-tab').forEach(el => el.classList.remove('active'));
   document.getElementById(`rpt-sub-${tab}`).classList.add('active');
-  document.getElementById('rpt-view-monthly').style.display    = tab === 'monthly'    ? '' : 'none';
+  document.getElementById('rpt-view-inventory').style.display  = tab === 'inventory'  ? '' : 'none';
+  document.getElementById('rpt-view-press').style.display      = tab === 'press'      ? '' : 'none';
   document.getElementById('rpt-view-popularity').style.display = tab === 'popularity' ? '' : 'none';
   if(tab === 'popularity') renderPopularity();
 }
 
 function initReports() {
-  const inp = document.getElementById('report-month');
-  if(!inp.value) {
-    const now = new Date();
-    inp.value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  // Sync month pickers
+  const now = new Date();
+  const monthVal = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
+  const invMonth   = document.getElementById('report-month');
+  const pressMonth = document.getElementById('report-month-press');
+  if(invMonth   && !invMonth.value)   invMonth.value   = monthVal;
+  if(pressMonth && !pressMonth.value) pressMonth.value = monthVal;
+
+  // Sync the press month picker to follow the inv picker
+  if(invMonth && pressMonth) {
+    invMonth.onchange   = () => { pressMonth.value = invMonth.value; };
+    pressMonth.onchange = () => { invMonth.value = pressMonth.value; };
   }
+
+  // Populate shop filter
   const shopSel = document.getElementById('report-shop');
-  const cur = shopSel.value;
-  const shops = [...new Set([...customShops, ...orderLog.map(o=>o.shop).filter(Boolean)])].sort();
-  shopSel.innerHTML = '<option value="">All shops</option>' +
-    shops.map(s=>`<option value="${s}"${s===cur?' selected':''}>${s}</option>`).join('');
-  if(reportSubTab === 'monthly') renderReports();
-  else renderPopularity();
+  if(shopSel) {
+    const cur = shopSel.value;
+    const shops = [...new Set([...customShops, ...orderLog.map(o=>o.shop).filter(Boolean)])].sort();
+    shopSel.innerHTML = '<option value="">All shops</option>' +
+      shops.map(s=>`<option value="${s}"${s===cur?' selected':''}>${s}</option>`).join('');
+  }
+
+  if(reportSubTab === 'popularity') renderPopularity();
+  else renderReports();
 }
 
 function parseMonth(monthVal) {
@@ -4186,14 +4219,25 @@ function inRange(isoDate, start, end) {
   return d >= start && d < end;
 }
 
+function getReportMonth() {
+  // Read from whichever month picker is active
+  const inv   = document.getElementById('report-month')?.value;
+  const press = document.getElementById('report-month-press')?.value;
+  return reportSubTab === 'press' ? (press || inv) : (inv || press);
+}
+
 function renderReports() {
-  const monthVal = document.getElementById('report-month').value;
+  if(reportSubTab === 'inventory') renderInvReport();
+  else if(reportSubTab === 'press') renderPressReport();
+  else renderPopularity();
+}
+
+function renderInvReport() {
+  const monthVal = document.getElementById('report-month')?.value;
   if(!monthVal) return;
   const { start, end, label } = parseMonth(monthVal);
 
-  const shopFilter = document.getElementById('report-shop').value;
-
-  // Build "added" from inventory.lots (source of truth)
+  // Build added from inventory.lots
   const added = [];
   inventory.forEach(item => {
     (item.lots || []).forEach(lot => {
@@ -4201,8 +4245,8 @@ function renderReports() {
       added.push({
         date: new Date(lot.isoDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
         isoDate: lot.isoDate,
-        type:  item.type, brand: item.brand, style: item.style,
-        color: item.color, size:  item.size,
+        type: item.type, brand: item.brand, style: item.style,
+        color: item.color, size: item.size,
         qty:      lot.origQty ?? lot.qty,
         cost:     lot.cost,
         totalCost: lot.cost != null ? Math.round(lot.cost * (lot.origQty ?? lot.qty) * 100) / 100 : null,
@@ -4211,54 +4255,21 @@ function renderReports() {
       });
     });
   });
-  // stockLog is kept in localStorage as a historical backup but no longer used for reports.
-  // inventory.lots is the sole source of truth.
 
-  const pressed = orderLog.filter(o => {
-    const d = o.isoDate ? new Date(o.isoDate) : new Date(o.date);
-    return d >= start && d < end && (!shopFilter || o.shop === shopFilter);
-  });
+  const addedQty  = added.reduce((s,e)=>s+e.qty, 0);
+  const addedCost = added.reduce((s,e)=>s+(e.totalCost??0), 0);
 
-  const addedQty     = added.reduce((s,e)=>s+e.qty, 0);
-  const addedCost    = added.reduce((s,e)=>s+(e.totalCost??0), 0);
-  const pressedQty   = pressed.reduce((s,o)=>s+o.qty, 0);
-  const pressedCost  = pressed.reduce((s,o)=>s+(o.blankCost??0), 0);
-  const hasCosts     = added.some(e=>e.totalCost!=null) || pressed.some(o=>o.blankCost!=null);
-
-  // ── KPI cards ───────────────────────────────────────────────────
-  const shopLabel = shopFilter ? ` · ${shopFilter}` : '';
-  let html = `
-  <div id="report-printable">
+  let html = `<div id="report-printable">
   <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
-    <h2 style="font-size:18px;font-weight:700">${label}${shopLabel} — Monthly Report</h2>
+    <h2 style="font-size:18px;font-weight:700">${label} — Inventory Report</h2>
     <span style="font-size:12px;color:var(--text3)">Generated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
   </div>
-
   <div class="rpt-kpi-row">
-    <div class="rpt-kpi">
-      <div class="rpt-kpi-label">Units purchased</div>
-      <div class="rpt-kpi-val">${addedQty}</div>
-      <div class="rpt-kpi-sub">${added.length} addition${added.length!==1?'s':''}</div>
-    </div>
-    <div class="rpt-kpi">
-      <div class="rpt-kpi-label">Blank cost (purchased)</div>
-      <div class="rpt-kpi-val">${hasCosts?'$'+addedCost.toFixed(2):'—'}</div>
-      <div class="rpt-kpi-sub">${addedQty>0&&addedCost>0?'$'+(addedCost/addedQty).toFixed(2)+' avg/unit':''}</div>
-    </div>
-    <div class="rpt-kpi">
-      <div class="rpt-kpi-label">Units pressed</div>
-      <div class="rpt-kpi-val">${pressedQty}</div>
-      <div class="rpt-kpi-sub">${pressed.length} order${pressed.length!==1?'s':''}</div>
-    </div>
-    <div class="rpt-kpi">
-      <div class="rpt-kpi-label">Blank cost (pressed)</div>
-      <div class="rpt-kpi-val">${hasCosts?'$'+pressedCost.toFixed(2):'—'}</div>
-      <div class="rpt-kpi-sub">${pressedQty>0&&pressedCost>0?'$'+(pressedCost/pressedQty).toFixed(2)+' avg/unit':''}</div>
-    </div>
+    <div class="rpt-kpi"><div class="rpt-kpi-label">Units purchased</div><div class="rpt-kpi-val">${addedQty}</div><div class="rpt-kpi-sub">${added.length} lot${added.length!==1?'s':''}</div></div>
+    <div class="rpt-kpi"><div class="rpt-kpi-label">Blank cost (purchased)</div><div class="rpt-kpi-val">${addedCost>0?'$'+addedCost.toFixed(2):'—'}</div><div class="rpt-kpi-sub">${addedQty>0&&addedCost>0?'$'+(addedCost/addedQty).toFixed(2)+' avg/unit':''}</div></div>
   </div>`;
 
-  // ── Purchased detail table (grouped by SKU, lots expandable) ──────
-  // Group lots by SKU key
+  // ── Purchased SKU table ─────────────────────────────────────────
   const skuGroups = {};
   added.forEach(e => {
     const key = `${e.type}||${e.brand}||${e.style||''}||${e.color}||${e.size}`;
@@ -4269,7 +4280,7 @@ function renderReports() {
 
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
     <div class="rpt-collapse-header" id="rpt-purchased-hdr" onclick="toggleRptSection('rpt-purchased')">
-      <span class="rpt-collapse-header-text">Inventory purchased this month (${skuCount} SKU${skuCount!==1?'s':''}, ${added.length} lot${added.length!==1?'s':''})</span>
+      <span class="rpt-collapse-header-text">Inventory purchased (${skuCount} SKU${skuCount!==1?'s':''}, ${added.length} lot${added.length!==1?'s':''})</span>
       <span class="rpt-collapse-btn" id="rpt-purchased-btn">▶</span>
     </div>`;
   if(added.length) {
@@ -4281,7 +4292,7 @@ function renderReports() {
   }
   html += `<div class="rpt-collapse-body" id="rpt-purchased" style="display:none">`;
   if(added.length) {
-    const skuId = (key) => 'rpt-sku-' + key.replace(/[^a-z0-9]/gi,'_');
+    const skuId = key => 'rpt-sku-' + key.replace(/[^a-z0-9]/gi,'_');
     html += `<div style="overflow:auto"><table><thead><tr>
       <th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Type</th>
       <th>Lots</th><th>Total qty</th><th>Total cost</th><th></th>
@@ -4292,40 +4303,93 @@ function renderReports() {
       const hasCost = sku.lots.some(l=>l.totalCost!=null);
       const sid = skuId(key);
       html += `<tr style="font-weight:500;background:var(--bg2)">
-        <td>${sku.brand}</td>
-        <td><span class="style-tag">${sku.style||'—'}</span></td>
+        <td>${sku.brand}</td><td><span class="style-tag">${sku.style||'—'}</span></td>
         <td>${sku.color}</td><td>${sku.size}</td><td style="color:var(--text2)">${sku.type}</td>
-        <td style="color:var(--text2)">${sku.lots.length}</td>
-        <td>${skuQty}</td>
+        <td style="color:var(--text2)">${sku.lots.length}</td><td>${skuQty}</td>
         <td>${hasCost?'$'+skuCost.toFixed(2):'—'}</td>
-        <td><button class="btn btn-sm" onclick="toggleLotDetail('${sid}', this)">▶ Lots</button></td>
-      </tr>
-      <tr><td colspan="9" style="padding:0">
+        <td><button class="btn btn-sm" onclick="toggleLotDetail('${sid}',this)">▶ Lots</button></td>
+      </tr><tr><td colspan="9" style="padding:0">
         <div id="${sid}" style="display:none;padding:0 0 4px 0">
-          <table style="width:100%;font-size:12px">
-            <thead><tr style="background:var(--bg3)">
-              <th style="padding:5px 10px">Purchase date</th>
-              <th>Qty</th><th>Cost/unit</th><th>Total cost</th><th>Supplier</th><th>Order #</th>
-            </tr></thead><tbody>`;
+          <table style="width:100%;font-size:12px"><thead><tr style="background:var(--bg3)">
+            <th style="padding:5px 10px">Purchase date</th><th>Qty</th><th>Cost/unit</th><th>Total cost</th><th>Supplier</th><th>Order #</th>
+          </tr></thead><tbody>`;
       sku.lots.forEach(l => {
-        html += `<tr>
-          <td style="padding:5px 10px;color:var(--text2)">${l.date}</td>
-          <td>${l.qty}</td>
-          <td>${l.cost!=null?'$'+l.cost.toFixed(2):'—'}</td>
-          <td>${l.totalCost!=null?'$'+l.totalCost.toFixed(2):'—'}</td>
-          <td style="color:var(--text2)">${l.supplier||'—'}</td>
-          <td style="color:var(--text2)">${l.supplierOrder||'—'}</td>
-        </tr>`;
+        html += `<tr><td style="padding:5px 10px;color:var(--text2)">${l.date}</td><td>${l.qty}</td>
+          <td>${l.cost!=null?'$'+l.cost.toFixed(2):'—'}</td><td>${l.totalCost!=null?'$'+l.totalCost.toFixed(2):'—'}</td>
+          <td style="color:var(--text2)">${l.supplier||'—'}</td><td style="color:var(--text2)">${l.supplierOrder||'—'}</td></tr>`;
       });
       html += `</tbody></table></div></td></tr>`;
     });
     html += `</tbody></table></div>`;
   } else {
-    html += `<p class="rpt-empty" style="padding:1rem 14px">No stock additions logged this month.</p>`;
+    html += `<p class="rpt-empty" style="padding:1rem 14px">No stock additions this month.</p>`;
   }
   html += `</div></div>`;
 
-  // ── Pressed detail table ────────────────────────────────────────
+  // ── Supplier breakdown ──────────────────────────────────────────
+  const supplierMap = {};
+  added.forEach(e => {
+    const s = e.supplier || '(No supplier)';
+    if(!supplierMap[s]) supplierMap[s] = { units:0, cost:0, hasCost:false, orders:new Set() };
+    supplierMap[s].units += e.qty;
+    if(e.totalCost != null) { supplierMap[s].cost += e.totalCost; supplierMap[s].hasCost = true; }
+    if(e.supplierOrder) supplierMap[s].orders.add(e.supplierOrder);
+  });
+  const supplierRows = Object.entries(supplierMap).sort((a,b)=>b[1].units-a[1].units);
+  const hasSupplierData = added.some(e=>e.supplier);
+
+  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
+    <div class="rpt-collapse-header has-open-body" id="rpt-suppliers-hdr" onclick="toggleRptSection('rpt-suppliers')">
+      <span class="rpt-collapse-header-text">Supplier breakdown</span>
+      <span class="rpt-collapse-btn open" id="rpt-suppliers-btn">▼</span>
+    </div>
+    <div class="rpt-collapse-body" id="rpt-suppliers">`;
+  if(!added.length) {
+    html += `<p class="rpt-empty" style="padding:1rem 14px">No stock additions this month.</p>`;
+  } else if(!hasSupplierData) {
+    html += `<p class="rpt-empty" style="padding:1rem 14px">No supplier info recorded. Use the backfill utility in Settings.</p>`;
+  } else {
+    html += `<div style="overflow:auto"><table><thead><tr><th>Supplier</th><th>Units purchased</th><th>Total cost</th><th>Avg cost/unit</th><th>Orders</th></tr></thead><tbody>`;
+    supplierRows.forEach(([name, d]) => {
+      html += `<tr><td style="font-weight:500">${name}</td><td>${d.units}</td>
+        <td>${d.hasCost?'$'+d.cost.toFixed(2):'—'}</td>
+        <td>${d.hasCost&&d.units>0?'$'+(d.cost/d.units).toFixed(2):'—'}</td>
+        <td style="font-size:12px;color:var(--text2)">${d.orders.size>0?[...d.orders].join(', '):'—'}</td></tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+  html += `</div></div>`;
+  html += `</div>`; // close report-printable
+
+  document.getElementById('report-inv-content').innerHTML = html;
+}
+
+function renderPressReport() {
+  const monthVal = document.getElementById('report-month-press')?.value || document.getElementById('report-month')?.value;
+  if(!monthVal) return;
+  const { start, end, label } = parseMonth(monthVal);
+  const shopFilter = document.getElementById('report-shop')?.value || '';
+
+  const pressed = orderLog.filter(o => {
+    const d = o.isoDate ? new Date(o.isoDate) : new Date(o.date);
+    return d >= start && d < end && (!shopFilter || o.shop === shopFilter);
+  });
+
+  const pressedQty  = pressed.reduce((s,o)=>s+o.qty, 0);
+  const pressedCost = pressed.reduce((s,o)=>s+(o.blankCost??0), 0);
+  const hasCosts    = pressed.some(o=>o.blankCost!=null);
+  const shopLabel   = shopFilter ? ` · ${shopFilter}` : '';
+
+  let html = `<div id="report-printable">
+  <div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
+    <h2 style="font-size:18px;font-weight:700">${label}${shopLabel} — Press Report</h2>
+    <span style="font-size:12px;color:var(--text3)">Generated ${new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}</span>
+  </div>
+  <div class="rpt-kpi-row">
+    <div class="rpt-kpi"><div class="rpt-kpi-label">Units pressed</div><div class="rpt-kpi-val">${pressedQty}</div><div class="rpt-kpi-sub">${pressed.length} order${pressed.length!==1?'s':''}</div></div>
+    <div class="rpt-kpi"><div class="rpt-kpi-label">Blank cost (pressed)</div><div class="rpt-kpi-val">${hasCosts?'$'+pressedCost.toFixed(2):'—'}</div><div class="rpt-kpi-sub">${pressedQty>0&&pressedCost>0?'$'+(pressedCost/pressedQty).toFixed(2)+' avg/unit':''}</div></div>
+  </div>`;
+
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
     <div class="rpt-collapse-header" id="rpt-pressed-hdr" onclick="toggleRptSection('rpt-pressed')">
       <span class="rpt-collapse-header-text">Orders pressed this month (${pressed.length} entries)</span>
@@ -4348,45 +4412,9 @@ function renderReports() {
   } else {
     html += `<p class="rpt-empty" style="padding:1rem 14px">No press orders logged this month.</p>`;
   }
-  html += `</div></div>`;
+  html += `</div></div></div>`; // close card + report-printable
 
-  // ── Supplier breakdown ─────────────────────────────────────────
-  const supplierMap = {};
-  added.forEach(e => {
-    const s = e.supplier || '(No supplier)';
-    if(!supplierMap[s]) supplierMap[s] = { units:0, cost:0, hasCost:false, orders:new Set() };
-    supplierMap[s].units += e.qty;
-    if(e.totalCost != null) { supplierMap[s].cost += e.totalCost; supplierMap[s].hasCost = true; }
-    if(e.supplierOrder) supplierMap[s].orders.add(e.supplierOrder);
-  });
-  const supplierRows = Object.entries(supplierMap).sort((a,b)=>b[1].units-a[1].units);
-  const hasSupplierData = added.some(e=>e.supplier);
-
-  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
-    <div class="rpt-collapse-header has-open-body" id="rpt-suppliers-hdr" onclick="toggleRptSection('rpt-suppliers')">
-      <span class="rpt-collapse-header-text">Supplier breakdown — stock purchased this month</span>
-      <span class="rpt-collapse-btn open" id="rpt-suppliers-btn">▼</span>
-    </div>
-    <div class="rpt-collapse-body" id="rpt-suppliers">`;
-  if(!added.length) {
-    html += `<p class="rpt-empty" style="padding:1rem 14px">No stock additions logged this month.</p>`;
-  } else if(!hasSupplierData) {
-    html += `<p class="rpt-empty" style="padding:1rem 14px">No supplier info recorded for this month's stock additions. Add a supplier when logging stock to see this report.</p>`;
-  } else {
-    html += `<div style="overflow:auto"><table><thead><tr><th>Supplier</th><th>Units purchased</th><th>Total cost</th><th>Avg cost/unit</th><th>Orders</th></tr></thead><tbody>`;
-    supplierRows.forEach(([name, d]) => {
-      const avgCost = d.hasCost && d.units > 0 ? '$'+(d.cost/d.units).toFixed(2) : '—';
-      const totalCost = d.hasCost ? '$'+d.cost.toFixed(2) : '—';
-      const orderNums = d.orders.size > 0 ? [...d.orders].join(', ') : '—';
-      html += `<tr><td style="font-weight:500">${name}</td><td>${d.units}</td><td>${totalCost}</td><td>${avgCost}</td><td style="font-size:12px;color:var(--text2)">${orderNums}</td></tr>`;
-    });
-    html += `</tbody></table></div>`;
-  }
-  html += `</div></div>`;
-
-  html += `</div>`; // close report-printable
-
-  document.getElementById('report-content').innerHTML = html;
+  document.getElementById('report-press-content').innerHTML = html;
 }
 
 function renderPopularity() {
