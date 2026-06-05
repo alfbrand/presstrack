@@ -754,10 +754,12 @@
       <!-- Inventory Report sub-tab -->
       <div id="rpt-view-inventory">
         <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:1.5rem" id="report-controls">
-          <div class="field" style="flex:0 0 auto">
-            <span class="label">Month</span>
-            <input type="month" id="report-month" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+          <div style="display:flex;gap:0;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;align-self:flex-end">
+            <button class="btn" id="rpt-inv-mode-month"   style="border:none;border-radius:0;padding:6px 12px;font-size:12px;background:var(--text);color:var(--bg)" onclick="setRptMode('inv','month')">Month</button>
+            <button class="btn" id="rpt-inv-mode-quarter" style="border:none;border-radius:0;padding:6px 12px;font-size:12px;border-left:0.5px solid var(--border2)" onclick="setRptMode('inv','quarter')">Quarter</button>
+            <button class="btn" id="rpt-inv-mode-year"    style="border:none;border-radius:0;padding:6px 12px;font-size:12px;border-left:0.5px solid var(--border2)" onclick="setRptMode('inv','year')">Year</button>
           </div>
+          <div id="rpt-inv-period-inputs" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"></div>
           <div style="display:flex;gap:8px;flex-wrap:wrap;align-self:flex-end">
             <button class="btn btn-primary" onclick="renderReports()">Run report</button>
             <button class="btn" onclick="exportReportCSV()">Download CSV</button>
@@ -765,17 +767,19 @@
           </div>
         </div>
         <div id="report-inv-content">
-          <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a month and click Run report.</p>
+          <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a period and click Run report.</p>
         </div>
       </div>
 
       <!-- Press Report sub-tab -->
       <div id="rpt-view-press" style="display:none">
         <div style="display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:1.5rem">
-          <div class="field" style="flex:0 0 auto">
-            <span class="label">Month</span>
-            <input type="month" id="report-month-press" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+          <div style="display:flex;gap:0;border:0.5px solid var(--border2);border-radius:var(--radius);overflow:hidden;align-self:flex-end">
+            <button class="btn" id="rpt-press-mode-month"   style="border:none;border-radius:0;padding:6px 12px;font-size:12px;background:var(--text);color:var(--bg)" onclick="setRptMode('press','month')">Month</button>
+            <button class="btn" id="rpt-press-mode-quarter" style="border:none;border-radius:0;padding:6px 12px;font-size:12px;border-left:0.5px solid var(--border2)" onclick="setRptMode('press','quarter')">Quarter</button>
+            <button class="btn" id="rpt-press-mode-year"    style="border:none;border-radius:0;padding:6px 12px;font-size:12px;border-left:0.5px solid var(--border2)" onclick="setRptMode('press','year')">Year</button>
           </div>
+          <div id="rpt-press-period-inputs" style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap"></div>
           <div class="field" style="flex:0 0 auto">
             <span class="label">Shop</span>
             <select id="report-shop" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);min-width:140px">
@@ -789,7 +793,7 @@
           </div>
         </div>
         <div id="report-press-content">
-          <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a month and click Run report.</p>
+          <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a period and click Run report.</p>
         </div>
       </div>
 
@@ -4189,21 +4193,9 @@ function showReportSubTab(tab) {
 }
 
 function initReports() {
-  // Sync month pickers
-  const now = new Date();
-  const monthVal = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}`;
-  const invMonth   = document.getElementById('report-month');
-  const pressMonth = document.getElementById('report-month-press');
-  if(invMonth   && !invMonth.value)   invMonth.value   = monthVal;
-  if(pressMonth && !pressMonth.value) pressMonth.value = monthVal;
+  buildRptPeriodInputs('inv',   rptInvMode);
+  buildRptPeriodInputs('press', rptPressMode);
 
-  // Sync the press month picker to follow the inv picker
-  if(invMonth && pressMonth) {
-    invMonth.onchange   = () => { pressMonth.value = invMonth.value; };
-    pressMonth.onchange = () => { invMonth.value = pressMonth.value; };
-  }
-
-  // Populate shop filter
   const shopSel = document.getElementById('report-shop');
   if(shopSel) {
     const cur = shopSel.value;
@@ -4214,7 +4206,7 @@ function initReports() {
 
   if(reportSubTab === 'popularity') renderPopularity();
   else if(reportSubTab === 'press') renderPressReport();
-  else { renderInvReport(); renderPressReport(); } // pre-run both so press is ready when tab is clicked
+  else { renderInvReport(); renderPressReport(); }
 }
 
 function parseMonth(monthVal) {
@@ -4229,11 +4221,88 @@ function inRange(isoDate, start, end) {
   return d >= start && d < end;
 }
 
+let rptInvMode   = 'month';  // 'month' | 'quarter' | 'year'
+let rptPressMode = 'month';
+
+function setRptMode(tab, mode) {
+  if(tab === 'inv')   rptInvMode   = mode;
+  if(tab === 'press') rptPressMode = mode;
+  // Update button highlight
+  ['month','quarter','year'].forEach(m => {
+    const btn = document.getElementById(`rpt-${tab}-mode-${m}`);
+    if(!btn) return;
+    btn.style.background = m === mode ? 'var(--text)' : '';
+    btn.style.color      = m === mode ? 'var(--bg)'   : '';
+  });
+  buildRptPeriodInputs(tab, mode);
+}
+
+function buildRptPeriodInputs(tab, mode) {
+  const wrap = document.getElementById(`rpt-${tab}-period-inputs`);
+  if(!wrap) return;
+  const now = new Date();
+  const yr  = now.getFullYear();
+  const mo  = now.getMonth() + 1;
+  const q   = Math.ceil(mo / 3);
+
+  // Build year options (current year back 5 years)
+  const yearOpts = Array.from({length:6}, (_,i) => yr - i)
+    .map(y => `<option value="${y}"${y===yr?' selected':''}>${y}</option>`).join('');
+
+  if(mode === 'month') {
+    const monthVal = `${yr}-${String(mo).padStart(2,'0')}`;
+    wrap.innerHTML = `<div class="field"><span class="label">Month</span>
+      <input type="month" id="rpt-${tab}-month" value="${monthVal}"
+        style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+    </div>`;
+  } else if(mode === 'quarter') {
+    const qOpts = ['Q1 (Jan–Mar)','Q2 (Apr–Jun)','Q3 (Jul–Sep)','Q4 (Oct–Dec)']
+      .map((l,i) => `<option value="${i+1}"${i+1===q?' selected':''}>${l}</option>`).join('');
+    wrap.innerHTML = `<div class="field"><span class="label">Quarter</span>
+      <select id="rpt-${tab}-quarter" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">${qOpts}</select>
+    </div>
+    <div class="field"><span class="label">Year</span>
+      <select id="rpt-${tab}-year-q" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">${yearOpts}</select>
+    </div>`;
+  } else {
+    wrap.innerHTML = `<div class="field"><span class="label">Year</span>
+      <select id="rpt-${tab}-year" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">${yearOpts}</select>
+    </div>`;
+  }
+}
+
+function getRptDateRange(tab) {
+  const mode = tab === 'inv' ? rptInvMode : rptPressMode;
+  const now  = new Date();
+  let start, end, label;
+
+  if(mode === 'month') {
+    const val = document.getElementById(`rpt-${tab}-month`)?.value;
+    if(!val) return null;
+    const [yr, mo] = val.split('-').map(Number);
+    start = new Date(yr, mo-1, 1);
+    end   = new Date(yr, mo, 1);
+    label = start.toLocaleDateString('en-US',{month:'long',year:'numeric'});
+  } else if(mode === 'quarter') {
+    const q  = parseInt(document.getElementById(`rpt-${tab}-quarter`)?.value || Math.ceil((now.getMonth()+1)/3));
+    const yr = parseInt(document.getElementById(`rpt-${tab}-year-q`)?.value  || now.getFullYear());
+    start = new Date(yr, (q-1)*3, 1);
+    end   = new Date(yr, q*3, 1);
+    label = `Q${q} ${yr}`;
+  } else {
+    const yr = parseInt(document.getElementById(`rpt-${tab}-year`)?.value || now.getFullYear());
+    start = new Date(yr, 0, 1);
+    end   = new Date(yr+1, 0, 1);
+    label = `${yr}`;
+  }
+  return { start, end, label };
+}
+
 function getReportMonth() {
-  // Read from whichever month picker is active
-  const inv   = document.getElementById('report-month')?.value;
-  const press = document.getElementById('report-month-press')?.value;
-  return reportSubTab === 'press' ? (press || inv) : (inv || press);
+  // Legacy helper — returns a label string for the active tab
+  const tab = reportSubTab === 'press' ? 'press' : 'inv';
+  const range = getRptDateRange(tab);
+  return range ? range.label : '';
 }
 
 function renderReports() {
@@ -4243,9 +4312,9 @@ function renderReports() {
 }
 
 function renderInvReport() {
-  const monthVal = document.getElementById('report-month')?.value;
-  if(!monthVal) return;
-  const { start, end, label } = parseMonth(monthVal);
+  const range = getRptDateRange('inv');
+  if(!range) return;
+  const { start, end, label } = range;
 
   // Build added from inventory.lots
   const added = [];
@@ -4375,9 +4444,9 @@ function renderInvReport() {
 }
 
 function renderPressReport() {
-  const monthVal = document.getElementById('report-month-press')?.value || document.getElementById('report-month')?.value;
-  if(!monthVal) return;
-  const { start, end, label } = parseMonth(monthVal);
+  const range = getRptDateRange('press');
+  if(!range) return;
+  const { start, end, label } = range;
   const shopFilter = document.getElementById('report-shop')?.value || '';
 
   const pressed = orderLog.filter(o => {
@@ -4437,42 +4506,83 @@ function renderPopularity() {
     { label:'Top styles', key:'style' },
   ];
 
-  if(!orderLog.length) {
+  if(!orderLog.length && !inventory.length) {
     document.getElementById('popularity-content').innerHTML =
-      `<p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">No orders logged yet — press some shirts first.</p>`;
+      `<p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">No data yet.</p>`;
     return;
   }
 
-  let html = `<div style="margin-bottom:1rem">
-    <h3 style="font-size:15px;font-weight:700;margin-bottom:0.25rem">Popularity — all time</h3>
-    <p style="font-size:12px;color:var(--text2)">Based on total units pressed across all orders.</p>
-  </div><div class="rpt-two-col">`;
-
-  dash.forEach(({label, key}) => {
-    const counts = {};
-    orderLog.forEach(o => {
-      const k = o[key] || '(none)';
-      counts[k] = (counts[k]||0) + o.qty;
+  // ── Supplier purchasing chart ───────────────────────────────────
+  const supplierCounts = {};
+  inventory.forEach(item => {
+    (item.lots || []).forEach(lot => {
+      const s = lot.supplier || '(No supplier)';
+      if(!supplierCounts[s]) supplierCounts[s] = { units: 0, cost: 0 };
+      supplierCounts[s].units += lot.origQty ?? lot.qty;
+      if(lot.cost != null) supplierCounts[s].cost += lot.cost * (lot.origQty ?? lot.qty);
     });
-    const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
-    const max = sorted[0]?.[1] || 1;
-    html += `<div class="rpt-section card"><div style="font-weight:600;font-size:13px;margin-bottom:10px">${label}</div>`;
-    if(!sorted.length) {
-      html += `<p class="rpt-empty">No data yet.</p>`;
-    } else {
-      sorted.forEach(([name, count]) => {
-        const pct = Math.round((count/max)*100);
-        html += `<div class="rpt-bar-row">
-          <div class="rpt-bar-label" title="${name}">${name}</div>
-          <div class="rpt-bar-track"><div class="rpt-bar-fill" style="width:${pct}%"></div></div>
-          <div class="rpt-bar-count">${count}</div>
-        </div>`;
-      });
-    }
-    html += `</div>`;
   });
+  const supplierSorted = Object.entries(supplierCounts).sort((a,b)=>b[1].units-a[1].units);
+  const supplierMax    = supplierSorted[0]?.[1].units || 1;
+  const totalSupplierUnits = supplierSorted.reduce((s,[,d])=>s+d.units, 0);
 
-  html += `</div>`;
+  let html = `<div style="margin-bottom:1.5rem">
+    <h3 style="font-size:15px;font-weight:700;margin-bottom:0.25rem">Supplier breakdown — all time</h3>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:1rem">Based on total units purchased across all inventory lots.</p>
+    <div class="rpt-section card">`;
+
+  if(!supplierSorted.length) {
+    html += `<p class="rpt-empty">No inventory data yet.</p>`;
+  } else {
+    supplierSorted.forEach(([name, d]) => {
+      const pct     = Math.round((d.units / supplierMax) * 100);
+      const sharePct = Math.round((d.units / totalSupplierUnits) * 100);
+      const avgCost  = d.cost > 0 && d.units > 0 ? ` · $${(d.cost/d.units).toFixed(2)}/unit` : '';
+      html += `<div class="rpt-bar-row" style="margin-bottom:10px">
+        <div class="rpt-bar-label" title="${name}" style="width:130px">${name}</div>
+        <div style="flex:1">
+          <div class="rpt-bar-track" style="margin-bottom:3px"><div class="rpt-bar-fill" style="width:${pct}%"></div></div>
+          <div style="font-size:10px;color:var(--text3)">${sharePct}% of purchases${avgCost}</div>
+        </div>
+        <div class="rpt-bar-count" style="width:60px;text-align:right">${d.units} units</div>
+      </div>`;
+    });
+  }
+  html += `</div></div>`;
+
+  // ── Press popularity charts ─────────────────────────────────────
+  if(orderLog.length) {
+    html += `<div style="margin-bottom:1rem">
+      <h3 style="font-size:15px;font-weight:700;margin-bottom:0.25rem">Press popularity — all time</h3>
+      <p style="font-size:12px;color:var(--text2)">Based on total units pressed across all orders.</p>
+    </div><div class="rpt-two-col">`;
+
+    dash.forEach(({label, key}) => {
+      const counts = {};
+      orderLog.forEach(o => {
+        const k = o[key] || '(none)';
+        counts[k] = (counts[k]||0) + o.qty;
+      });
+      const sorted = Object.entries(counts).sort((a,b)=>b[1]-a[1]).slice(0,8);
+      const max = sorted[0]?.[1] || 1;
+      html += `<div class="rpt-section card"><div style="font-weight:600;font-size:13px;margin-bottom:10px">${label}</div>`;
+      if(!sorted.length) {
+        html += `<p class="rpt-empty">No data yet.</p>`;
+      } else {
+        sorted.forEach(([name, count]) => {
+          const pct = Math.round((count/max)*100);
+          html += `<div class="rpt-bar-row">
+            <div class="rpt-bar-label" title="${name}">${name}</div>
+            <div class="rpt-bar-track"><div class="rpt-bar-fill" style="width:${pct}%"></div></div>
+            <div class="rpt-bar-count">${count}</div>
+          </div>`;
+        });
+      }
+      html += `</div>`;
+    });
+    html += `</div>`;
+  }
+
   document.getElementById('popularity-content').innerHTML = html;
 }
 
