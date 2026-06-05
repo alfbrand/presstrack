@@ -1262,25 +1262,34 @@ function migrateInventory() {
       item.lots = [{ qty: item.qty, origQty: item.qty, cost: item.cost ?? null, isoDate: new Date(0).toISOString() }];
     }
     // Seed origQty and supplier info from stockLog on any lot that's missing them
-    item.lots.forEach(lot => {
-      // Find all stockLog entries for this SKU
-      const skuMatches = stockLog.filter(e =>
-        e.type  === item.type  && e.brand === item.brand &&
-        e.style === item.style && e.color === item.color &&
-        e.size  === item.size
-      );
-      // Prefer exact isoDate match; if only one stockLog entry exists use it as fallback
-      const exactMatch = skuMatches.find(e => e.isoDate === lot.isoDate);
-      const bestMatch  = exactMatch || (skuMatches.length === 1 ? skuMatches[0] : null);
+    const skuMatches = stockLog.filter(e =>
+      e.type  === item.type  && e.brand === item.brand &&
+      e.style === item.style && e.color === item.color &&
+      e.size  === item.size
+    );
+    // Track which stockLog entries have been claimed to avoid double-assigning
+    const claimed = new Set();
 
-      if(lot.origQty == null) {
-        lot.origQty = bestMatch ? bestMatch.qty : lot.qty;
-      }
-      if(bestMatch && !lot.supplier && bestMatch.supplier) {
-        lot.supplier = bestMatch.supplier;
-      }
-      if(bestMatch && !lot.supplierOrder && bestMatch.supplierOrder) {
-        lot.supplierOrder = bestMatch.supplierOrder;
+    item.lots.forEach((lot, lotIdx) => {
+      if(lot.supplier) return; // already has supplier, skip
+
+      // 1. Exact isoDate match
+      let bestMatch = skuMatches.find((e, i) => !claimed.has(i) && e.isoDate === lot.isoDate);
+      // 2. Match by origQty
+      if(!bestMatch) bestMatch = skuMatches.find((e, i) => !claimed.has(i) && e.qty === (lot.origQty ?? lot.qty));
+      // 3. Only one stockLog entry for this SKU — use it
+      if(!bestMatch && skuMatches.length === 1 && !claimed.has(0)) bestMatch = skuMatches[0];
+      // 4. Match by position (lot index) as last resort
+      if(!bestMatch && skuMatches[lotIdx] && !claimed.has(lotIdx)) bestMatch = skuMatches[lotIdx];
+
+      if(bestMatch) {
+        const idx = skuMatches.indexOf(bestMatch);
+        claimed.add(idx);
+        if(lot.origQty == null) lot.origQty = bestMatch.qty;
+        if(!lot.supplier      && bestMatch.supplier)      lot.supplier      = bestMatch.supplier;
+        if(!lot.supplierOrder && bestMatch.supplierOrder) lot.supplierOrder = bestMatch.supplierOrder;
+      } else if(lot.origQty == null) {
+        lot.origQty = lot.qty;
       }
     });
     item.qty = item.lots.reduce((s,l)=>s+l.qty, 0);
