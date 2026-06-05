@@ -4121,6 +4121,14 @@ function toggleRptSection(id) {
   if(hdr) hdr.classList.toggle('has-open-body', !isOpen);
 }
 
+function toggleLotDetail(id, btn) {
+  const body = document.getElementById(id);
+  if(!body) return;
+  const isOpen = body.style.display !== 'none';
+  body.style.display = isOpen ? 'none' : '';
+  btn.textContent = isOpen ? '▶ Lots' : '▼ Lots';
+}
+
 let reportSubTab = 'monthly';
 
 function showReportSubTab(tab) {
@@ -4271,7 +4279,7 @@ function renderReports() {
         <td style="color:var(--text2)">${sku.lots.length}</td>
         <td>${skuQty}</td>
         <td>${hasCost?'$'+skuCost.toFixed(2):'—'}</td>
-        <td><button class="btn btn-sm" onclick="toggleRptSection('${sid}')">▶ Lots</button></td>
+        <td><button class="btn btn-sm" onclick="toggleLotDetail('${sid}', this)">▶ Lots</button></td>
       </tr>
       <tr><td colspan="9" style="padding:0">
         <div id="${sid}" style="display:none;padding:0 0 4px 0">
