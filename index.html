@@ -4279,9 +4279,9 @@ function renderInvReport() {
   const skuCount = Object.keys(skuGroups).length;
 
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
-    <div class="rpt-collapse-header" id="rpt-purchased-hdr" onclick="toggleRptSection('rpt-purchased')">
+    <div class="rpt-collapse-header has-open-body" id="rpt-purchased-hdr" onclick="toggleRptSection('rpt-purchased')">
       <span class="rpt-collapse-header-text">Inventory purchased (${skuCount} SKU${skuCount!==1?'s':''}, ${added.length} lot${added.length!==1?'s':''})</span>
-      <span class="rpt-collapse-btn" id="rpt-purchased-btn">▶</span>
+      <span class="rpt-collapse-btn open" id="rpt-purchased-btn">▼</span>
     </div>`;
   if(added.length) {
     html += `<div style="display:flex;gap:24px;padding:8px 14px;background:var(--bg2);border-top:0.5px solid var(--border);font-size:12px;color:var(--text2)">
@@ -4290,7 +4290,7 @@ function renderInvReport() {
       ${addedQty>0&&addedCost>0?`<span><strong style="color:var(--text)">$${(addedCost/addedQty).toFixed(2)}</strong> avg/unit</span>`:''}
     </div>`;
   }
-  html += `<div class="rpt-collapse-body" id="rpt-purchased" style="display:none">`;
+  html += `<div class="rpt-collapse-body" id="rpt-purchased">`;
   if(added.length) {
     const skuId = key => 'rpt-sku-' + key.replace(/[^a-z0-9]/gi,'_');
     html += `<div style="overflow:auto"><table><thead><tr>
@@ -4391,9 +4391,9 @@ function renderPressReport() {
   </div>`;
 
   html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
-    <div class="rpt-collapse-header" id="rpt-pressed-hdr" onclick="toggleRptSection('rpt-pressed')">
+    <div class="rpt-collapse-header has-open-body" id="rpt-pressed-hdr" onclick="toggleRptSection('rpt-pressed')">
       <span class="rpt-collapse-header-text">Orders pressed this month (${pressed.length} entries)</span>
-      <span class="rpt-collapse-btn" id="rpt-pressed-btn">▶</span>
+      <span class="rpt-collapse-btn open" id="rpt-pressed-btn">▼</span>
     </div>`;
   if(pressed.length) {
     html += `<div style="display:flex;gap:24px;padding:8px 14px;background:var(--bg2);border-top:0.5px solid var(--border);font-size:12px;color:var(--text2)">
@@ -4402,7 +4402,7 @@ function renderPressReport() {
       ${pressedQty>0&&pressedCost>0?`<span><strong style="color:var(--text)">$${(pressedCost/pressedQty).toFixed(2)}</strong> avg/unit</span>`:''}
     </div>`;
   }
-  html += `<div class="rpt-collapse-body" id="rpt-pressed" style="display:none">`;
+  html += `<div class="rpt-collapse-body" id="rpt-pressed">`;
   if(pressed.length) {
     html += `<div style="overflow:auto"><table><thead><tr><th>Date</th><th>Shop</th><th>Order #</th><th>Type</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Qty</th><th>Blank cost</th></tr></thead><tbody>`;
     pressed.forEach(o => {
