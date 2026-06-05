@@ -1297,6 +1297,31 @@ function migrateInventory() {
       }
     });
     item.qty = item.lots.reduce((s,l)=>s+l.qty, 0);
+
+    // Restore any stockLog entries that were purged (deducted to 0 and removed)
+    // by adding them back as zero-qty lots so purchase records survive for audit
+    const skuStockLog = stockLog.filter(e =>
+      e.type  === item.type  && e.brand === item.brand &&
+      e.style === item.style && e.color === item.color &&
+      e.size  === item.size
+    );
+    skuStockLog.forEach(e => {
+      const alreadyCovered = item.lots.some(l =>
+        l.isoDate === e.isoDate ||
+        (l.origQty === e.qty && Math.abs(new Date(l.isoDate) - new Date(e.isoDate)) < 86400000)
+      );
+      if(!alreadyCovered) {
+        item.lots.push({
+          qty:          0,
+          origQty:      e.qty,
+          cost:         e.cost ?? null,
+          isoDate:      e.isoDate,
+          supplier:     e.supplier      || '',
+          supplierOrder:e.supplierOrder || '',
+          _restored:    true  // flag so we know it came from stockLog
+        });
+      }
+    });
   });
 }
 migrateInventory();
@@ -1337,9 +1362,8 @@ function deductFIFO(item, qtyNeeded) {
     lot.qty -= take;
     toDeduce -= take;
   });
-  // Remove empty lots
-  item.lots = item.lots.filter(l=>l.qty>0);
-  item.qty  = itemTotalQty(item);
+  // Empty lots are kept (qty=0) so purchase records are preserved for audit/reporting
+  item.qty = itemTotalQty(item);
   return hasCost ? Math.round(totalCost*100)/100 : null;
 }
 
