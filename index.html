@@ -503,7 +503,7 @@
                 <select id="add-size">
                   <option value="">Select size</option>
                   <option>XS</option><option>S</option><option>M</option><option>L</option>
-                  <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>One size</option>
+                  <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>5XL</option><option>One size</option>
                 </select>
               </div>
               <div class="field">
@@ -560,7 +560,7 @@
             <div style="background:var(--bg2);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;font-size:12px;color:var(--text2)">
               <strong style="color:var(--text);display:block;margin-bottom:6px">Required columns:</strong>
               type, brand, style, color, size, qty, cost<br>
-              <span style="color:var(--text3);margin-top:4px;display:block">size: XS S M L XL 2XL 3XL 4XL One size &nbsp;·&nbsp; date_added: YYYY-MM-DD &nbsp;·&nbsp; supplier and supplier_order optional</span>
+              <span style="color:var(--text3);margin-top:4px;display:block">size: XS S M L XL 2XL 3XL 4XL 5XL One size &nbsp;·&nbsp; date_added: YYYY-MM-DD &nbsp;·&nbsp; supplier and supplier_order optional</span>
             </div>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px">
               <button class="btn" onclick="downloadCSVTemplate()">⬇ Download template</button>
@@ -921,7 +921,7 @@
       <span class="label">Size</span>
       <select id="edit-inv-size">
         <option>XS</option><option>S</option><option>M</option><option>L</option>
-        <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>One size</option>
+        <option>XL</option><option>2XL</option><option>3XL</option><option>4XL</option><option>5XL</option><option>One size</option>
       </select>
     </div>
 
@@ -2251,7 +2251,7 @@ function updateResStyle() {
 function updateResColor() {
   const type=document.getElementById('res-type').value, brand=document.getElementById('res-brand').value;
   const style=document.getElementById('res-style').value, color=document.getElementById('res-color').value;
-  const sizeOrder=['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  const sizeOrder=['XS','S','M','L','XL','2XL','3XL','4XL','5XL','One size'];
   const sizes=[...new Set(inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style&&i.color===color).map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
   document.getElementById('res-size').innerHTML='<option value="">Select size</option>'+sizes.map(s=>`<option>${s}</option>`).join('');
 }
@@ -2450,7 +2450,7 @@ function updateStats() {
   document.getElementById('stat-low').textContent   = low;
 }
 function updateFilters() {
-  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','One size'];
   buildFilterSelect('filter-type',  'types',  inventory.map(i=>i.type));
   buildFilterSelect('filter-brand', 'brands', inventory.map(i=>i.brand));
   buildFilterSelect('filter-color', 'colors', inventory.map(i=>i.color));
@@ -2472,7 +2472,7 @@ function renderTable() {
   const fs      = document.getElementById('filter-size').value;
   const ft      = document.getElementById('filter-type').value;
   const fstatus = document.getElementById('filter-status')?.value || '';
-  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','One size'];
 
   // Show/hide reset button
   const resetBtn = document.getElementById('inv-filter-reset-btn');
@@ -2741,7 +2741,7 @@ function renderReorderPanel() {
   if(!panel) return;
   const watched = inventory.filter(i => i.watch && itemTotalQty(i) <= lowThreshold);
   if(!watched.length) { panel.style.display = 'none'; panel.innerHTML = ''; return; }
-  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','One size'];
 
   const wasOpen   = panel._reorderOpen   || false;
   const sortBy    = panel._reorderSort   || 'qty';
@@ -2940,7 +2940,7 @@ function renderSizeGrid() {
   const type  = document.getElementById('inv-pivot-type').value;
   const items = inventory.filter(i => i.type === type);
   const container = document.getElementById('inv-size-grid');
-  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size','NB','6mo','12mo','24mo','2T','3T','4T','5T'];
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','One size','NB','6mo','12mo','24mo','2T','3T','4T','5T'];
 
   if(!items.length) { container.innerHTML=`<div class="empty">No ${type} inventory found.</div>`; return; }
 
@@ -3010,7 +3010,7 @@ function renderSizeGrid() {
 
 // ── ADD STOCK ──────────────────────────────────────────────────────
 // ── ADD MODE TOGGLE ────────────────────────────────────────────────
-const SIZES        = ['XS','S','M','L','XL','2XL','3XL','4XL'];
+const SIZES        = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL'];
 const SIZES_INFANT = ['NB','6mo','12mo','24mo','2T','3T','4T','5T'];
 const SIZES_ALL    = [...SIZES, ...SIZES_INFANT, 'One size'];
 let addMode = 'single';
@@ -3431,7 +3431,7 @@ function updatePressStyle() {
 function updatePressColor() {
   const type=document.getElementById('press-type').value, brand=document.getElementById('press-brand').value;
   const style=document.getElementById('press-style').value, color=document.getElementById('press-color').value;
-  const sizeOrder=['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  const sizeOrder=['XS','S','M','L','XL','2XL','3XL','4XL','5XL','One size'];
   const availItems = inventory.filter(i=>i.type===type&&i.brand===brand&&i.style===style&&i.color===color && availableQty(i)>0);
   const sizes=[...new Set(availItems.map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
   document.getElementById('press-size').innerHTML='<option value="">Select size</option>'+sizes.map(s=>`<option>${s}</option>`).join('');
@@ -3721,7 +3721,7 @@ function updateLogFilters() {
   buildFilterSelect('log-adv-brand','brands', orderLog.map(o=>o.brand).filter(Boolean));
   buildFilterSelect('log-adv-style','styles', orderLog.map(o=>o.style).filter(Boolean));
   buildFilterSelect('log-adv-color','colors', orderLog.map(o=>o.color).filter(Boolean));
-  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','One size'];
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','One size'];
   const sizes = [...new Set(orderLog.map(o=>o.size).filter(Boolean))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
   const sizeSel = document.getElementById('log-adv-size');
   if(sizeSel) { const cur=sizeSel.value; sizeSel.innerHTML='<option value="">Any size</option>'+sizes.map(s=>`<option${s===cur?' selected':''}>${s}</option>`).join(''); }
