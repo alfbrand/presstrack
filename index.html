@@ -748,6 +748,7 @@
       <div class="sub-tabs">
         <button class="sub-tab active" id="rpt-sub-inventory" onclick="showReportSubTab('inventory')">Inventory Report</button>
         <button class="sub-tab" id="rpt-sub-press" onclick="showReportSubTab('press')">Press Report</button>
+        <button class="sub-tab" id="rpt-sub-supplier" onclick="showReportSubTab('supplier')">Supplier Reconciliation</button>
         <button class="sub-tab" id="rpt-sub-popularity" onclick="showReportSubTab('popularity')">Popularity</button>
       </div>
 
@@ -795,6 +796,11 @@
         <div id="report-press-content">
           <p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">Select a period and click Run report.</p>
         </div>
+      </div>
+
+      <!-- Supplier Reconciliation sub-tab -->
+      <div id="rpt-view-supplier" style="display:none">
+        <div id="report-supplier-content"></div>
       </div>
 
       <!-- Popularity sub-tab -->
@@ -4212,8 +4218,10 @@ function showReportSubTab(tab) {
   document.getElementById(`rpt-sub-${tab}`).classList.add('active');
   document.getElementById('rpt-view-inventory').style.display  = tab === 'inventory'  ? '' : 'none';
   document.getElementById('rpt-view-press').style.display      = tab === 'press'      ? '' : 'none';
+  document.getElementById('rpt-view-supplier').style.display   = tab === 'supplier'   ? '' : 'none';
   document.getElementById('rpt-view-popularity').style.display = tab === 'popularity' ? '' : 'none';
   if(tab === 'popularity') renderPopularity();
+  if(tab === 'supplier')   renderSupplierReconciliation();
 }
 
 function initReports() {
@@ -4518,6 +4526,167 @@ function renderPressReport() {
   html += `</div></div></div>`; // close card + report-printable
 
   document.getElementById('report-press-content').innerHTML = html;
+}
+
+function renderSupplierReconciliation() {
+  const container = document.getElementById('report-supplier-content');
+
+  // Collect all lots across all inventory items
+  const allLots = [];
+  inventory.forEach(item => {
+    (item.lots || []).forEach(lot => {
+      allLots.push({
+        supplier:      lot.supplier      || '(No supplier)',
+        supplierOrder: lot.supplierOrder || '(No order #)',
+        isoDate:       lot.isoDate,
+        date:          lot.isoDate ? new Date(lot.isoDate).getTime() === 0
+                         ? 'Legacy'
+                         : new Date(lot.isoDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})
+                         : '—',
+        type:    item.type,
+        brand:   item.brand,
+        style:   item.style || '—',
+        color:   item.color,
+        size:    item.size,
+        origQty: lot.origQty ?? lot.qty,
+        qty:     lot.qty,
+        cost:    lot.cost,
+        totalCost: lot.cost != null ? Math.round(lot.cost * (lot.origQty ?? lot.qty) * 100) / 100 : null,
+      });
+    });
+  });
+
+  if(!allLots.length) {
+    container.innerHTML = `<p style="color:var(--text3);font-size:14px;text-align:center;padding:3rem 0">No inventory lots on record yet.</p>`;
+    return;
+  }
+
+  // Group: Supplier → Order # → lots
+  const supplierGroups = {};
+  allLots.forEach(lot => {
+    const s = lot.supplier;
+    const o = lot.supplierOrder;
+    if(!supplierGroups[s]) supplierGroups[s] = {};
+    if(!supplierGroups[s][o]) supplierGroups[s][o] = [];
+    supplierGroups[s][o].push(lot);
+  });
+
+  // Sort suppliers; within each, sort orders by date
+  const suppliersSorted = Object.keys(supplierGroups).sort((a,b) => {
+    if(a === '(No supplier)') return 1;
+    if(b === '(No supplier)') return -1;
+    return a.localeCompare(b);
+  });
+
+  // Grand totals
+  const grandUnits = allLots.reduce((s,l)=>s+l.origQty, 0);
+  const grandCost  = allLots.reduce((s,l)=>s+(l.totalCost??0), 0);
+
+  let html = `<div style="display:flex;align-items:baseline;justify-content:space-between;margin-bottom:1.25rem;flex-wrap:wrap;gap:8px">
+    <div>
+      <h2 style="font-size:18px;font-weight:700;margin-bottom:2px">Supplier Reconciliation — All Time</h2>
+      <p style="font-size:12px;color:var(--text2)">${suppliersSorted.length} supplier${suppliersSorted.length!==1?'s':''} · ${grandUnits} units purchased · ${grandCost>0?'$'+grandCost.toFixed(2)+' total cost':''}</p>
+    </div>
+  </div>`;
+
+  suppliersSorted.forEach(supplier => {
+    const orders = supplierGroups[supplier];
+    const supplierLots  = Object.values(orders).flat();
+    const supplierUnits = supplierLots.reduce((s,l)=>s+l.origQty, 0);
+    const supplierCost  = supplierLots.reduce((s,l)=>s+(l.totalCost??0), 0);
+    const orderCount    = Object.keys(orders).length;
+
+    html += `<div class="card" style="margin-bottom:1rem;padding:0;overflow:hidden">
+      <!-- Supplier header -->
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;background:var(--bg2);border-bottom:0.5px solid var(--border);flex-wrap:wrap;gap:8px">
+        <div>
+          <span style="font-size:15px;font-weight:700">${supplier}</span>
+          <span style="font-size:12px;color:var(--text2);margin-left:12px">${orderCount} order${orderCount!==1?'s':''}</span>
+        </div>
+        <div style="display:flex;gap:16px;font-size:12px;color:var(--text2)">
+          <span><strong style="color:var(--text)">${supplierUnits}</strong> units</span>
+          ${supplierCost>0?`<span><strong style="color:var(--text)">$${supplierCost.toFixed(2)}</strong> total</span>`:''}
+          ${supplierCost>0&&supplierUnits>0?`<span><strong style="color:var(--text)">$${(supplierCost/supplierUnits).toFixed(2)}</strong> avg/unit</span>`:''}
+        </div>
+      </div>`;
+
+    // Sort orders by earliest lot date within each order
+    const ordersSorted = Object.entries(orders).sort(([,lotsA],[,lotsB]) => {
+      const da = Math.min(...lotsA.map(l=>new Date(l.isoDate).getTime()));
+      const db = Math.min(...lotsB.map(l=>new Date(l.isoDate).getTime()));
+      return da - db;
+    });
+
+    ordersSorted.forEach(([orderNum, lots]) => {
+      const orderUnits = lots.reduce((s,l)=>s+l.origQty, 0);
+      const orderCost  = lots.reduce((s,l)=>s+(l.totalCost??0), 0);
+      const orderDate  = lots.reduce((a,l) => {
+        const d = new Date(l.isoDate);
+        return (!a || d < a) ? d : a;
+      }, null);
+      const orderDateStr = orderDate && orderDate.getTime() !== 0
+        ? orderDate.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}) : '—';
+      const fullyDepleted = lots.every(l=>l.qty===0);
+
+      html += `<div style="border-bottom:0.5px solid var(--border)">
+        <!-- Order # sub-header -->
+        <div style="display:flex;align-items:center;justify-content:space-between;padding:8px 16px 8px 24px;background:var(--bg);flex-wrap:wrap;gap:8px">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:13px;font-weight:600">${orderNum}</span>
+            <span style="font-size:12px;color:var(--text2)">${orderDateStr}</span>
+            ${fullyDepleted?`<span class="badge badge-zero" style="font-size:10px">Fully used</span>`:
+              lots.some(l=>l.qty===0)?`<span class="badge badge-low" style="font-size:10px">Partially used</span>`:
+              `<span class="badge badge-ok" style="font-size:10px">In stock</span>`}
+          </div>
+          <div style="display:flex;gap:16px;font-size:12px;color:var(--text2)">
+            <span><strong style="color:var(--text)">${orderUnits}</strong> units</span>
+            ${orderCost>0?`<span><strong style="color:var(--text)">$${orderCost.toFixed(2)}</strong></span>`:''}
+          </div>
+        </div>
+        <!-- Line items -->
+        <div style="overflow-x:auto">
+          <table style="width:100%;font-size:12px">
+            <thead><tr style="background:var(--bg3)">
+              <th style="padding:5px 10px 5px 28px;text-align:left">Date</th>
+              <th style="padding:5px 10px;text-align:left">Brand</th>
+              <th style="padding:5px 10px;text-align:left">Style</th>
+              <th style="padding:5px 10px;text-align:left">Color</th>
+              <th style="padding:5px 10px;text-align:left">Size</th>
+              <th style="padding:5px 10px;text-align:left">Type</th>
+              <th style="padding:5px 10px;text-align:right">Purchased</th>
+              <th style="padding:5px 10px;text-align:right">Remaining</th>
+              <th style="padding:5px 10px;text-align:right">Cost/unit</th>
+              <th style="padding:5px 10px;text-align:right">Total cost</th>
+            </tr></thead>
+            <tbody>`;
+
+      // Sort lots within order by brand then size
+      const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','One size'];
+      lots.sort((a,b) => a.brand.localeCompare(b.brand) || a.color.localeCompare(b.color) || sizeOrder.indexOf(a.size)-sizeOrder.indexOf(b.size));
+
+      lots.forEach(lot => {
+        const depleted = lot.qty === 0;
+        html += `<tr style="${depleted?'opacity:0.55':''}">
+          <td style="padding:5px 10px 5px 28px;color:var(--text2)">${lot.date}</td>
+          <td style="padding:5px 10px;font-weight:500">${lot.brand}</td>
+          <td style="padding:5px 10px"><span class="style-tag">${lot.style}</span></td>
+          <td style="padding:5px 10px">${lot.color}</td>
+          <td style="padding:5px 10px;font-weight:600">${lot.size}</td>
+          <td style="padding:5px 10px;color:var(--text2)">${lot.type}</td>
+          <td style="padding:5px 10px;text-align:right;font-weight:600">${lot.origQty}</td>
+          <td style="padding:5px 10px;text-align:right;color:${depleted?'var(--danger-text)':'var(--success-text)'};font-weight:600">${lot.qty}</td>
+          <td style="padding:5px 10px;text-align:right;color:var(--text2)">${lot.cost!=null?'$'+lot.cost.toFixed(2):'—'}</td>
+          <td style="padding:5px 10px;text-align:right;color:var(--text2)">${lot.totalCost!=null?'$'+lot.totalCost.toFixed(2):'—'}</td>
+        </tr>`;
+      });
+
+      html += `</tbody></table></div></div>`;
+    });
+
+    html += `</div>`;
+  });
+
+  container.innerHTML = html;
 }
 
 function renderPopularity() {
