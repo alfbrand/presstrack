@@ -1901,9 +1901,9 @@ function previewDeleteLotsByDate() {
     (item.lots || []).forEach((lot, idx) => {
       const d = new Date(lot.isoDate);
       if(d >= target && d < targetNext) {
-        matches.push({ item, lot, idx,
-          key: `${item.type}||${item.brand}||${item.style}||${item.color}||${item.size}||${idx}`,
-          label: `${item.brand}${item.style?' '+item.style:''} ${item.color} ${item.size} — ${lot.origQty??lot.qty} units${lot.cost!=null?' @ $'+lot.cost.toFixed(2):''}` });
+        // Include lot index as tiebreaker for same-SKU same-date lots
+        const key = `${item.type}||${item.brand}||${item.style}||${item.color}||${item.size}||${lot.isoDate}||${idx}`;
+        matches.push({ key, label: `${item.brand}${item.style?' '+item.style:''} ${item.color} ${item.size} — ${lot.origQty??lot.qty} units${lot.cost!=null?' @ $'+lot.cost.toFixed(2):''}` });
       }
     });
   });
@@ -1937,28 +1937,22 @@ function toggleAllDeleteLots(checked) {
 }
 
 function confirmDeleteSelectedLots() {
-  const selected = [...document.querySelectorAll('.delete-lot-cb:checked')].map(cb => cb.dataset.key);
-  if(!selected.length) { alert('No lots selected.'); return; }
-  if(!confirm(`Delete ${selected.length} selected lot${selected.length!==1?'s':''}? This cannot be undone.`)) return;
-
-  // Build a set of {itemKey + isoDate} to match — safer than using indices which shift on splice
-  const toDelete = new Set(selected);
+  const selected = new Set([...document.querySelectorAll('.delete-lot-cb:checked')].map(cb => cb.dataset.key));
+  if(!selected.size) { alert('No lots selected.'); return; }
+  if(!confirm(`Delete ${selected.size} selected lot${selected.size!==1?'s':''}? This cannot be undone.`)) return;
 
   let removed = 0;
   inventory.forEach(item => {
     const before = item.lots.length;
-    // Assign a stable _deleteKey to each lot matching the selected keys
     item.lots = item.lots.filter((lot, idx) => {
-      const key = `${item.type}||${item.brand}||${item.style}||${item.color}||${item.size}||${idx}`;
-      return !toDelete.has(key);
+      const key = `${item.type}||${item.brand}||${item.style}||${item.color}||${item.size}||${lot.isoDate}||${idx}`;
+      return !selected.has(key);
     });
     removed += before - item.lots.length;
     item.qty = item.lots.reduce((s,l)=>s+l.qty, 0);
   });
 
-  // Remove SKUs with no lots left
   inventory = inventory.filter(i => i.lots.length > 0);
-
   save(); updateFilters(); updateStats(); renderCurrentInvView();
 
   document.getElementById('delete-lots-preview').innerHTML =
