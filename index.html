@@ -1322,6 +1322,7 @@ function migrateInventory() {
       e.size  === item.size
     );
     skuStockLog.forEach(e => {
+      if(e._deleted) return; // was intentionally deleted, don't restore
       const alreadyCovered = item.lots.some(l =>
         l.isoDate === e.isoDate ||
         (l.origQty === e.qty && Math.abs(new Date(l.isoDate) - new Date(e.isoDate)) < 86400000)
@@ -1968,13 +1969,21 @@ function confirmDeleteSelectedLots() {
   toDelete.forEach(({ item, lot }) => {
     item.lots = item.lots.filter(l => l !== lot);
     item.qty  = item.lots.reduce((s,l)=>s+l.qty, 0);
+    // Also mark matching stockLog entries as deleted so migration never restores them
+    stockLog.forEach(e => {
+      if(e.type  === item.type  && e.brand === item.brand &&
+         e.style === item.style && e.color === item.color &&
+         e.size  === item.size  && e.isoDate === lot.isoDate) {
+        e._deleted = true;
+      }
+    });
   });
 
   // Remove SKUs with no lots left
   inventory = inventory.filter(i => i.lots.length > 0);
 
   _lotsToDelete = [];
-  save(); updateFilters(); updateStats(); renderCurrentInvView();
+  save(); saveStockLog(); updateFilters(); updateStats(); renderCurrentInvView();
 
   const previewEl = document.getElementById('delete-lots-preview');
   if(previewEl) previewEl.innerHTML =
