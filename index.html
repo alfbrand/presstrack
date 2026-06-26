@@ -1938,21 +1938,22 @@ function toggleAllDeleteLots(checked) {
 
 function confirmDeleteSelectedLots() {
   const selected = [...document.querySelectorAll('.delete-lot-cb:checked')].map(cb => cb.dataset.key);
-  if(!selected.length) {
-    alert('No lots selected.');
-    return;
-  }
+  if(!selected.length) { alert('No lots selected.'); return; }
   if(!confirm(`Delete ${selected.length} selected lot${selected.length!==1?'s':''}? This cannot be undone.`)) return;
 
+  // Build a set of {itemKey + isoDate} to match — safer than using indices which shift on splice
+  const toDelete = new Set(selected);
+
   let removed = 0;
-  selected.forEach(key => {
-    const [type, brand, style, color, size, lotIdxStr] = key.split('||');
-    const lotIdx = parseInt(lotIdxStr);
-    const item = inventory.find(i => i.type===type && i.brand===brand && i.style===style && i.color===color && i.size===size);
-    if(!item || !item.lots[lotIdx]) return;
-    item.lots.splice(lotIdx, 1);
+  inventory.forEach(item => {
+    const before = item.lots.length;
+    // Assign a stable _deleteKey to each lot matching the selected keys
+    item.lots = item.lots.filter((lot, idx) => {
+      const key = `${item.type}||${item.brand}||${item.style}||${item.color}||${item.size}||${idx}`;
+      return !toDelete.has(key);
+    });
+    removed += before - item.lots.length;
     item.qty = item.lots.reduce((s,l)=>s+l.qty, 0);
-    removed++;
   });
 
   // Remove SKUs with no lots left
