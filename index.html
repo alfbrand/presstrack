@@ -2101,18 +2101,26 @@ function renderEditInvLots(item) {
   el.innerHTML = item.lots.map((lot, idx) => {
     const isLegacy = lot.isoDate && new Date(lot.isoDate).getTime() === 0;
     const dateVal  = isLegacy || !lot.isoDate ? '' : lot.isoDate.slice(0, 10);
-    return `<div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--bg2);border-radius:var(--radius);margin-bottom:6px;flex-wrap:wrap">
-      <span style="font-size:12px;color:var(--text2);flex-shrink:0"><strong>${lot.qty}</strong> unit${lot.qty!==1?'s':''}</span>
-      <div style="display:flex;align-items:center;gap:6px;flex:1;flex-wrap:wrap">
-        <input type="date" class="edit-inv-lot-date" data-lot-idx="${idx}" value="${dateVal}"
-          style="padding:4px 8px;font-size:12px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
-        <div class="input-prefix" style="width:auto">
-          <span>$</span>
-          <input type="number" class="edit-inv-lot-cost" data-lot-idx="${idx}" min="0" step="0.01"
-            value="${lot.cost!=null?lot.cost:''}" placeholder="—"
-            style="width:80px;border:none;border-radius:0;padding:5px 8px;font-size:13px;background:var(--bg);color:var(--text)">
+    const origQty  = lot.origQty ?? lot.qty;
+    return `<div style="padding:8px 10px;background:var(--bg2);border-radius:var(--radius);margin-bottom:6px">
+      <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
+        <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
+          <span style="font-size:11px;color:var(--text2)">Qty purchased:</span>
+          <input type="number" class="edit-inv-lot-origqty" data-lot-idx="${idx}" min="0" value="${origQty}"
+            style="width:64px;padding:4px 7px;font-size:13px;font-weight:600;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text);text-align:center">
+        </div>
+        <div style="display:flex;align-items:center;gap:6px;flex:1;flex-wrap:wrap">
+          <input type="date" class="edit-inv-lot-date" data-lot-idx="${idx}" value="${dateVal}"
+            style="padding:4px 8px;font-size:12px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+          <div class="input-prefix" style="width:auto">
+            <span>$</span>
+            <input type="number" class="edit-inv-lot-cost" data-lot-idx="${idx}" min="0" step="0.01"
+              value="${lot.cost!=null?lot.cost:''}" placeholder="—"
+              style="width:80px;border:none;border-radius:0;padding:5px 8px;font-size:13px;background:var(--bg);color:var(--text)">
+          </div>
         </div>
       </div>
+      ${lot.qty !== origQty ? `<div style="font-size:11px;color:var(--text2);margin-top:4px">${lot.qty} units remaining in stock</div>` : ''}
     </div>`;
   }).join('');
 }
@@ -2142,7 +2150,14 @@ function saveEditInv() {
     return;
   }
 
-  // Update lot dates and costs, syncing back to stockLog entries
+  // Update lot dates, costs, and origQty
+  document.querySelectorAll('.edit-inv-lot-origqty').forEach(input => {
+    const idx = parseInt(input.dataset.lotIdx);
+    const val = parseInt(input.value);
+    if(item.lots[idx] && !isNaN(val) && val >= 0) {
+      item.lots[idx].origQty = val;
+    }
+  });
   document.querySelectorAll('.edit-inv-lot-cost').forEach(input => {
     const idx = parseInt(input.dataset.lotIdx);
     const val = input.value;
