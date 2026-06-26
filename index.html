@@ -1892,17 +1892,17 @@ function previewDeleteLotsByDate() {
   const preview = document.getElementById('delete-lots-preview');
   if(!dateVal) { preview.innerHTML = `<p style="font-size:12px;color:var(--danger-text)">Please select a date.</p>`; return; }
 
-  const target = new Date(dateVal + 'T00:00:00');
+  const target     = new Date(dateVal + 'T00:00:00');
   const targetNext = new Date(dateVal + 'T00:00:00');
   targetNext.setDate(targetNext.getDate() + 1);
 
-  // Find all lots matching this date
   const matches = [];
   inventory.forEach(item => {
     (item.lots || []).forEach((lot, idx) => {
       const d = new Date(lot.isoDate);
       if(d >= target && d < targetNext) {
         matches.push({ item, lot, idx,
+          key: `${item.type}||${item.brand}||${item.style}||${item.color}||${item.size}||${idx}`,
           label: `${item.brand}${item.style?' '+item.style:''} ${item.color} ${item.size} — ${lot.origQty??lot.qty} units${lot.cost!=null?' @ $'+lot.cost.toFixed(2):''}` });
       }
     });
@@ -1913,34 +1913,49 @@ function previewDeleteLotsByDate() {
     return;
   }
 
-  const totalUnits = matches.reduce((s,m)=>s+(m.lot.origQty??m.lot.qty), 0);
+  const dateLabel = new Date(dateVal+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});
   preview.innerHTML = `
     <div style="font-size:12px;color:var(--danger-text);margin-bottom:8px;font-weight:600">
-      Found ${matches.length} lot${matches.length!==1?'s':''} (${totalUnits} units) on ${new Date(dateVal+'T12:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'})}:
+      Found ${matches.length} lot${matches.length!==1?'s':''} on ${dateLabel} — check the ones to delete:
     </div>
-    <div style="max-height:160px;overflow-y:auto;margin-bottom:8px;font-size:11px;color:var(--danger-text);opacity:0.85">
-      ${matches.map(m=>`<div style="padding:2px 0">${m.label}</div>`).join('')}
+    <div style="max-height:220px;overflow-y:auto;margin-bottom:8px;border:0.5px solid var(--danger-text);border-radius:var(--radius);background:var(--bg)">
+      <div style="padding:5px 8px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:6px">
+        <input type="checkbox" id="delete-lots-all" onchange="toggleAllDeleteLots(this.checked)" checked>
+        <label for="delete-lots-all" style="font-size:11px;font-weight:600;cursor:pointer">Select all</label>
+      </div>
+      ${matches.map((m,i) => `
+        <div style="padding:5px 8px;border-bottom:0.5px solid var(--border);display:flex;align-items:center;gap:6px">
+          <input type="checkbox" class="delete-lot-cb" data-key="${m.key}" id="dlot-${i}" checked>
+          <label for="dlot-${i}" style="font-size:11px;color:var(--danger-text);cursor:pointer;flex:1">${m.label}</label>
+        </div>`).join('')}
     </div>
-    <button class="btn btn-danger btn-sm" onclick="confirmDeleteLotsByDate('${dateVal}')">Delete these ${matches.length} lot${matches.length!==1?'s':''}</button>`;
+    <button class="btn btn-danger btn-sm" onclick="confirmDeleteSelectedLots()">Delete selected</button>`;
 }
 
-function confirmDeleteLotsByDate(dateVal) {
-  const target     = new Date(dateVal + 'T00:00:00');
-  const targetNext = new Date(dateVal + 'T00:00:00');
-  targetNext.setDate(targetNext.getDate() + 1);
+function toggleAllDeleteLots(checked) {
+  document.querySelectorAll('.delete-lot-cb').forEach(cb => cb.checked = checked);
+}
+
+function confirmDeleteSelectedLots() {
+  const selected = [...document.querySelectorAll('.delete-lot-cb:checked')].map(cb => cb.dataset.key);
+  if(!selected.length) {
+    alert('No lots selected.');
+    return;
+  }
+  if(!confirm(`Delete ${selected.length} selected lot${selected.length!==1?'s':''}? This cannot be undone.`)) return;
 
   let removed = 0;
-  inventory.forEach(item => {
-    const before = item.lots.length;
-    item.lots = item.lots.filter(lot => {
-      const d = new Date(lot.isoDate);
-      return !(d >= target && d < targetNext);
-    });
-    removed += before - item.lots.length;
+  selected.forEach(key => {
+    const [type, brand, style, color, size, lotIdxStr] = key.split('||');
+    const lotIdx = parseInt(lotIdxStr);
+    const item = inventory.find(i => i.type===type && i.brand===brand && i.style===style && i.color===color && i.size===size);
+    if(!item || !item.lots[lotIdx]) return;
+    item.lots.splice(lotIdx, 1);
     item.qty = item.lots.reduce((s,l)=>s+l.qty, 0);
+    removed++;
   });
 
-  // Remove inventory items that now have no lots at all
+  // Remove SKUs with no lots left
   inventory = inventory.filter(i => i.lots.length > 0);
 
   save(); updateFilters(); updateStats(); renderCurrentInvView();
