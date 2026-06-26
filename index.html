@@ -2244,6 +2244,8 @@ function saveEditInv() {
     const val = parseInt(input.value);
     if(item.lots[idx] && !isNaN(val) && val >= 0) {
       item.lots[idx].origQty = val;
+      // Cap in-stock qty — can't have more remaining than originally purchased
+      if(item.lots[idx].qty > val) item.lots[idx].qty = val;
     }
   });
   document.querySelectorAll('.edit-inv-lot-cost').forEach(input => {
@@ -2294,6 +2296,8 @@ function saveEditInv() {
     if(!brandStyles[newBrand].includes(newStyle)) brandStyles[newBrand].push(newStyle);
   }
 
+  // Recalculate cached qty after any lot changes
+  item.qty = itemTotalQty(item);
   save(); saveOptions(); updateFilters(); renderCurrentInvView(); updateStats();
   alertEl.innerHTML='<div class="alert alert-success">Changes saved.</div>';
   setTimeout(()=>closeEditInv(), 900);
