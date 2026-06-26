@@ -1937,9 +1937,15 @@ function toggleAllDeleteLots(checked) {
 }
 
 function confirmDeleteSelectedLots() {
-  const selected = new Set([...document.querySelectorAll('.delete-lot-cb:checked')].map(cb => cb.dataset.key));
+  // Collect keys BEFORE confirm dialog — dialog can blur/hide the settings panel
+  // causing the DOM checkboxes to become inaccessible
+  const checkboxes = [...document.querySelectorAll('.delete-lot-cb:checked')];
+  const selected = new Set(checkboxes.map(cb => cb.dataset.key));
   if(!selected.size) { alert('No lots selected.'); return; }
-  if(!confirm(`Delete ${selected.size} selected lot${selected.size!==1?'s':''}? This cannot be undone.`)) return;
+
+  // Store count for the confirm message before dialog potentially closes panel
+  const count = selected.size;
+  if(!confirm(`Delete ${count} selected lot${count!==1?'s':''}? This cannot be undone.`)) return;
 
   let removed = 0;
   inventory.forEach(item => {
@@ -1955,10 +1961,15 @@ function confirmDeleteSelectedLots() {
   inventory = inventory.filter(i => i.lots.length > 0);
   save(); updateFilters(); updateStats(); renderCurrentInvView();
 
-  document.getElementById('delete-lots-preview').innerHTML =
+  const previewEl = document.getElementById('delete-lots-preview');
+  if(previewEl) previewEl.innerHTML =
     `<div class="alert alert-success" style="font-size:12px;margin-top:6px">Deleted ${removed} lot${removed!==1?'s':''}. Inventory updated.</div>`;
-  document.getElementById('delete-lots-date').value = '';
-  setTimeout(() => { document.getElementById('delete-lots-preview').innerHTML = ''; }, 4000);
+  const dateEl = document.getElementById('delete-lots-date');
+  if(dateEl) dateEl.value = '';
+  setTimeout(() => {
+    const el = document.getElementById('delete-lots-preview');
+    if(el) el.innerHTML = '';
+  }, 4000);
 }
 function exportData() {
   const data = { inventory, orderLog, stockLog, reservations, customTypes, customBrands, customColors, customShops, shopColors, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
