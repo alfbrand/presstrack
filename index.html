@@ -3529,7 +3529,10 @@ function populatePressDropdowns() {
   const yyyy = today.getFullYear();
   const mm = String(today.getMonth()+1).padStart(2,'0');
   const dd = String(today.getDate()).padStart(2,'0');
-  document.getElementById('press-date').value = `${yyyy}-${mm}-${dd}`;
+  const todayStr = `${yyyy}-${mm}-${dd}`;
+  const pressDateEl = document.getElementById('press-date');
+  pressDateEl.value = todayStr;
+  pressDateEl.max   = todayStr;
 
   buildComboSelect('press-shop','shop',customShops,'');
   document.getElementById('press-shop').onchange=function(){ handleCombo('shop'); };
@@ -3764,8 +3767,9 @@ function submitPressOrder() {
   // Reset everything
   pressCart = [];
   renderPressCart();
-  const _t = new Date();
-  document.getElementById('press-date').value = `${_t.getFullYear()}-${String(_t.getMonth()+1).padStart(2,'0')}-${String(_t.getDate()).padStart(2,'0')}`;
+  const _t=new Date(), _pd=document.getElementById('press-date');
+  const _ts=`${_t.getFullYear()}-${String(_t.getMonth()+1).padStart(2,'0')}-${String(_t.getDate()).padStart(2,'0')}`;
+  _pd.value=_ts; _pd.max=_ts;
   document.getElementById('press-order-num').value='';
   document.getElementById('press-note').value='';
   populatePressDropdowns();
