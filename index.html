@@ -2176,7 +2176,43 @@ function saveWorkingReservation(note) {
   updateInvReserveBtn();
 }
 
-// ── EDIT INVENTORY ITEM ────────────────────────────────────────────
+function mergeIntoConflict() {
+  const from = window._mergeFrom;
+  const to   = window._mergeTo;
+  if(!from || !to) return;
+
+  // Move all lots from the typo item into the target item
+  to.lots.push(...from.lots);
+  to.qty = itemTotalQty(to);
+
+  // Also update any orderLog entries that referenced the old identity
+  orderLog.forEach(o => {
+    if(o.type===from.type && o.brand===from.brand && o.style===from.style &&
+       o.color===from.color && o.size===from.size) {
+      o.type=to.type; o.brand=to.brand; o.style=to.style;
+      o.color=to.color; o.size=to.size;
+    }
+  });
+
+  // Remove the source item
+  inventory = inventory.filter(i => i !== from);
+
+  window._mergeFrom = null;
+  window._mergeTo   = null;
+
+  save(); saveLog(); updateFilters(); updateStats(); renderCurrentInvView();
+  closeEditInv();
+  showAlert('edit-inv-alert', `Merged into ${to.brand}${to.style?' '+to.style:''} ${to.color} ${to.size} — now ${to.lots.length} lot${to.lots.length!==1?'s':''}, ${itemTotalQty(to)} in stock.`, 'success');
+}
+
+function showAlert(id, msg, type='success') {
+  // Show a temporary alert — works even after the modal closes by targeting the inventory view
+  const el = document.getElementById(id);
+  if(el) {
+    el.innerHTML = `<div class="alert alert-${type}">${msg}</div>`;
+    setTimeout(()=>{ el.innerHTML=''; }, 4000);
+  }
+}
 function openEditInv(t, b, st, c, s) {
   const item = getItem(t, b, st, c, s);
   if(!item) return;
@@ -2260,7 +2296,13 @@ function saveEditInv() {
   // Check if new identity conflicts with a different existing item
   const conflict = getItem(newType, newBrand, newStyle||'', newColor, newSize);
   if(conflict && conflict !== item) {
-    alertEl.innerHTML='<div class="alert alert-error">Another inventory item already exists with this combination. Merge by removing one first.</div>';
+    alertEl.innerHTML=`<div class="alert alert-error" style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px">
+      <span>An item already exists with this combination (${conflict.lots.length} lot${conflict.lots.length!==1?'s':''}, ${itemTotalQty(conflict)} in stock). Merge all lots from this item into it?</span>
+      <button class="btn btn-sm btn-danger" style="flex-shrink:0" onclick="mergeIntoConflict()">Merge</button>
+    </div>`;
+    // Store references for the merge operation
+    window._mergeFrom = item;
+    window._mergeTo   = conflict;
     return;
   }
 
