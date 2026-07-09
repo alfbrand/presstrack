@@ -360,6 +360,7 @@
     <div class="tabs">
       <button class="tab active" onclick="showTab('inventory')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.38 3.46 16 2a4 4 0 0 1-8 0L3.62 3.46a2 2 0 0 0-1.34 2.23l.58 3.57a1 1 0 0 0 .99.84H6v10c0 1.1.9 2 2 2h8a2 2 0 0 0 2-2V10h2.15a1 1 0 0 0 .99-.84l.58-3.57a2 2 0 0 0-1.34-2.23z"/></svg>Inventory</button>
       <button class="tab" onclick="showTab('log')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1z"/><path d="M14 8H8"/><path d="M16 12H8"/><path d="M13 16H8"/></svg>Order log</button>
+      <button class="tab" onclick="showTab('adjustments')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Adjustments</button>
       <button class="tab" onclick="showTab('reports')"><svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21.21 15.89A10 10 0 1 1 8 2.83"/><path d="M22 12A10 10 0 0 0 12 2v10z"/></svg>Reports</button>
     </div>
 
@@ -741,6 +742,28 @@
       </div>
 
       <div id="log-groups"></div>
+    </div>
+
+    <!-- ── ADJUSTMENTS ── -->
+    <div id="tab-adjustments" style="display:none">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:1rem;flex-wrap:wrap;gap:8px">
+        <div class="filter-row" style="margin-bottom:0;flex:1;min-width:0">
+          <select id="adj-filter-reason" onchange="renderAdjLog()">
+            <option value="">All reasons</option>
+            <option>Damaged / destroyed</option>
+            <option>Returned to supplier</option>
+            <option>Gift / sample</option>
+            <option>Shrinkage / loss</option>
+          </select>
+        </div>
+      </div>
+      <div id="adj-log-stats" style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap"></div>
+      <div class="tbl-wrap">
+        <table>
+          <thead><tr><th>Date</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Type</th><th>Qty</th><th>Reason</th><th>Note</th><th></th></tr></thead>
+          <tbody id="adj-log-body"></tbody>
+        </table>
+      </div>
     </div>
 
     <!-- ── REPORTS ── -->
@@ -2166,7 +2189,75 @@ function populateAddDropdowns() {
   document.getElementById('style-hint').textContent = 'Select a brand first';
 }
 
-// ── STOCK ADJUSTMENTS ──────────────────────────────────────────────
+// ── ADJUSTMENT LOG ─────────────────────────────────────────────────
+function renderAdjLog() {
+  const filterReason = document.getElementById('adj-filter-reason')?.value || '';
+  const rows = adjustmentLog.filter(a => !filterReason || a.reason === filterReason);
+  const totalQty = rows.reduce((s,a)=>s+a.qty, 0);
+
+  // Stats
+  const statsEl = document.getElementById('adj-log-stats');
+  if(statsEl) {
+    const byReason = {};
+    rows.forEach(a => { byReason[a.reason]=(byReason[a.reason]||0)+a.qty; });
+    statsEl.innerHTML =
+      `<div class="stat" style="padding:8px 14px"><div class="stat-label">Total adjustments</div><div class="stat-val" style="font-size:17px">${rows.length}</div></div>` +
+      `<div class="stat" style="padding:8px 14px"><div class="stat-label">Units removed</div><div class="stat-val" style="font-size:17px">${totalQty}</div></div>` +
+      Object.entries(byReason).map(([r,q])=>`<div class="stat" style="padding:8px 14px"><div class="stat-label">${r}</div><div class="stat-val" style="font-size:17px">${q}</div></div>`).join('');
+  }
+
+  const tbody = document.getElementById('adj-log-body');
+  if(!rows.length) {
+    tbody.innerHTML = `<tr><td colspan="10" class="empty">No adjustments logged yet.</td></tr>`;
+    return;
+  }
+  tbody.innerHTML = rows.map(a => `<tr>
+    <td style="color:var(--text2);font-size:12px">${a.date}</td>
+    <td>${a.brand}</td>
+    <td><span class="style-tag">${a.style||'—'}</span></td>
+    <td>${a.color}</td>
+    <td style="font-weight:600">${a.size}</td>
+    <td style="color:var(--text2)">${a.type}</td>
+    <td style="font-weight:600">${a.qty}</td>
+    <td><span class="badge badge-low">${a.reason}</span></td>
+    <td style="white-space:normal;font-size:12px;color:var(--text2);max-width:160px">${a.note||''}</td>
+    <td><button class="btn btn-sm" onclick="reverseAdjustment(${a.id})">Reverse</button></td>
+  </tr>`).join('');
+}
+
+function reverseAdjustment(id) {
+  const entry = adjustmentLog.find(a => a.id === id);
+  if(!entry) return;
+  if(!confirm(`Reverse this adjustment?\n\n${entry.qty}× ${entry.brand}${entry.style?' '+entry.style:''} ${entry.color} ${entry.size} — ${entry.reason}\n\nThis will restore ${entry.qty} unit${entry.qty!==1?'s':''} to inventory and remove this log entry.`)) return;
+
+  // Restore qty — add back to the most recent lot (or create a new one if none exist)
+  const item = getItem(entry.type, entry.brand, entry.style||'', entry.color, entry.size);
+  if(item && item.lots.length) {
+    // Add back to the last (most recent) lot
+    const lot = item.lots[item.lots.length - 1];
+    lot.qty += entry.qty;
+    // Don't exceed origQty — if it would, bump origQty too since this is a reinstatement
+    if(lot.qty > (lot.origQty ?? lot.qty)) lot.origQty = lot.qty;
+    item.qty = itemTotalQty(item);
+  } else if(item) {
+    // No lots — create one
+    item.lots.push({ qty: entry.qty, origQty: entry.qty, cost: null, isoDate: new Date().toISOString() });
+    item.qty = itemTotalQty(item);
+  } else {
+    // Item was fully removed — recreate it
+    inventory.push({
+      type: entry.type, brand: entry.brand, style: entry.style||'',
+      color: entry.color, size: entry.size, qty: entry.qty,
+      lots: [{ qty: entry.qty, origQty: entry.qty, cost: null, isoDate: new Date().toISOString() }]
+    });
+  }
+
+  // Remove the adjustment entry
+  adjustmentLog = adjustmentLog.filter(a => a.id !== id);
+
+  save(); saveAdjLog(); updateStats(); updateFilters(); renderCurrentInvView();
+  renderAdjLog();
+}
 const ADJ_REASONS = ['Damaged / destroyed','Returned to supplier','Gift / sample','Shrinkage / loss'];
 
 function openAdjModal(t, b, st, c, s) {
@@ -2716,12 +2807,13 @@ function showTab(t) {
   document.querySelectorAll('[id^="tab-"]').forEach(el=>el.style.display='none');
   document.querySelectorAll('.tab').forEach((el,i)=>{
     el.classList.remove('active');
-    if(['inventory','log','reports'][i]===t) el.classList.add('active');
+    if(['inventory','log','adjustments','reports'][i]===t) el.classList.add('active');
   });
   document.getElementById('tab-'+t).style.display = 'block';
-  if(t==='inventory') { updateStats(); updateFilters(); renderCurrentInvView(); }
-  if(t==='log')       { updateLogFilters(); renderLog(); }
-  if(t==='reports')   initReports();
+  if(t==='inventory')   { updateStats(); updateFilters(); renderCurrentInvView(); }
+  if(t==='log')         { updateLogFilters(); renderLog(); }
+  if(t==='adjustments') { renderAdjLog(); }
+  if(t==='reports')     { initReports(); }
 }
 
 // ── INVENTORY ──────────────────────────────────────────────────────
