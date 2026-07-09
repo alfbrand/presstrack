@@ -821,6 +821,41 @@
     </div>
   </div>
 
+<!-- ADJUST STOCK MODAL -->
+<div id="adj-overlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:300;align-items:center;justify-content:center;padding:1rem" onclick="closeAdjModal(event)">
+  <div id="adj-panel" style="background:var(--bg);border-radius:var(--radius-lg);padding:1.5rem;width:100%;max-width:440px;border:0.5px solid var(--border)">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:0.25rem">
+      <h2 style="font-size:16px;font-weight:600">Adjust stock</h2>
+      <button class="btn-icon" onclick="document.getElementById('adj-overlay').style.display='none'">✕</button>
+    </div>
+    <p id="adj-item-label" style="font-size:13px;color:var(--text2);margin-bottom:1rem"></p>
+    <div id="adj-alert"></div>
+    <div class="g2" style="margin-bottom:12px">
+      <div class="field">
+        <span class="label">Reason</span>
+        <select id="adj-reason">
+          <option value="Damaged / destroyed">Damaged / destroyed</option>
+          <option value="Returned to supplier">Returned to supplier</option>
+          <option value="Gift / sample">Gift / sample</option>
+          <option value="Shrinkage / loss">Shrinkage / loss</option>
+        </select>
+      </div>
+      <div class="field">
+        <span class="label">Qty to remove</span>
+        <input type="number" id="adj-qty" min="1" value="1">
+      </div>
+    </div>
+    <div class="field" style="margin-bottom:16px">
+      <span class="label">Note (optional)</span>
+      <input type="text" id="adj-note" placeholder="e.g. Misprinted, returned to S&S">
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn btn-primary" onclick="submitAdjustment()">Remove from stock</button>
+      <button class="btn" onclick="document.getElementById('adj-overlay').style.display='none'">Cancel</button>
+    </div>
+  </div>
+</div>
+
 </div><!-- /app-shell -->
 
 <!-- RESERVATION SLIDE-OUT -->
@@ -1195,7 +1230,9 @@ function saveOptions() {
 }
 function save()    { try { localStorage.setItem('pt_inv', JSON.stringify(inventory)); } catch(e){} }
 function saveLog()   { try { localStorage.setItem('pt_log',  JSON.stringify(orderLog)); } catch(e){} }
-function saveStockLog() { try { localStorage.setItem('pt_slog', JSON.stringify(stockLog));  } catch(e){} }
+let adjustmentLog = JSON.parse(localStorage.getItem('pt_adj') || '[]');
+function saveAdjLog() { try { localStorage.setItem('pt_adj', JSON.stringify(adjustmentLog)); } catch(e){} }
+function saveStockLog() { try { localStorage.setItem('pt_slog', JSON.stringify(stockLog)); } catch(e){} }
 
 function getItem(t,b,st,c,s) { return inventory.find(i=>i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s); }
 function fmt(n) { return n!=null ? '$'+Number(n).toFixed(2) : '—'; }
@@ -1993,7 +2030,7 @@ function confirmDeleteSelectedLots() {
   setTimeout(() => { const el = document.getElementById('delete-lots-preview'); if(el) el.innerHTML=''; }, 4000);
 }
 function exportData() {
-  const data = { inventory, orderLog, stockLog, reservations, customTypes, customBrands, customColors, customShops, shopColors, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
+  const data = { inventory, orderLog, stockLog, adjustmentLog, reservations, customTypes, customBrands, customColors, customShops, shopColors, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -2010,7 +2047,7 @@ function importData(e) {
       if(!confirm(`Import ${data.inventory.length} inventory items and ${(data.orderLog||[]).length} orders? This will replace your current data.`)) return;
       inventory    = data.inventory    || [];
       orderLog     = data.orderLog     || [];
-      stockLog     = data.stockLog     || [];
+      adjustmentLog = data.adjustmentLog || [];
       customTypes  = data.customTypes  || [...DEFAULT_TYPES];
       customBrands = data.customBrands || [...DEFAULT_BRANDS];
       customColors = data.customColors || [...DEFAULT_COLORS];
@@ -2129,7 +2166,74 @@ function populateAddDropdowns() {
   document.getElementById('style-hint').textContent = 'Select a brand first';
 }
 
-// ── QUICK RESERVE (working reservation cart) ───────────────────────
+// ── STOCK ADJUSTMENTS ──────────────────────────────────────────────
+const ADJ_REASONS = ['Damaged / destroyed','Returned to supplier','Gift / sample','Shrinkage / loss'];
+
+function openAdjModal(t, b, st, c, s) {
+  const item = getItem(t, b, st, c, s);
+  if(!item) return;
+  const avail = availableQty(item);
+  document.getElementById('adj-item-label').textContent =
+    `${b}${st?' '+st:''} ${c} ${s} · ${avail} available`;
+  document.getElementById('adj-qty').value = '1';
+  document.getElementById('adj-qty').max = avail;
+  document.getElementById('adj-reason').value = ADJ_REASONS[0];
+  document.getElementById('adj-note').value = '';
+  document.getElementById('adj-alert').innerHTML = '';
+  const overlay = document.getElementById('adj-overlay');
+  overlay.style.display = 'flex';
+  overlay.dataset.t  = t;
+  overlay.dataset.b  = b;
+  overlay.dataset.st = st;
+  overlay.dataset.c  = c;
+  overlay.dataset.s  = s;
+}
+
+function closeAdjModal(e) {
+  if(e.target.id === 'adj-overlay') document.getElementById('adj-overlay').style.display = 'none';
+}
+
+function submitAdjustment() {
+  const overlay = document.getElementById('adj-overlay');
+  const t  = overlay.dataset.t,  b  = overlay.dataset.b;
+  const st = overlay.dataset.st, c  = overlay.dataset.c, s = overlay.dataset.s;
+  const item   = getItem(t, b, st, c, s);
+  const reason = document.getElementById('adj-reason').value;
+  const qty    = parseInt(document.getElementById('adj-qty').value) || 0;
+  const note   = document.getElementById('adj-note').value.trim();
+  const alertEl = document.getElementById('adj-alert');
+
+  if(!item) return;
+  const avail = availableQty(item);
+  if(qty < 1 || qty > avail) {
+    alertEl.innerHTML = `<div class="alert alert-error">Enter a quantity between 1 and ${avail}.</div>`;
+    return;
+  }
+
+  // Deduct via FIFO
+  let remaining = qty;
+  const lots = [...item.lots].sort((a,b) => new Date(a.isoDate)-new Date(b.isoDate));
+  lots.forEach(lot => {
+    if(remaining <= 0 || lot.qty <= 0) return;
+    const take = Math.min(lot.qty, remaining);
+    lot.qty -= take;
+    remaining -= take;
+  });
+  item.qty = itemTotalQty(item);
+
+  // Log the adjustment
+  adjustmentLog.unshift({
+    id:       Date.now(),
+    isoDate:  new Date().toISOString(),
+    date:     new Date().toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+    type: t, brand: b, style: st||'', color: c, size: s,
+    qty, reason, note,
+  });
+
+  save(); saveAdjLog();
+  updateStats(); renderCurrentInvView();
+  overlay.style.display = 'none';
+}
 let workingRes = []; // [{type,brand,style,color,size,qty}]
 
 function quickReserve(t, b, st, c, s) {
@@ -2882,6 +2986,7 @@ function renderTable() {
               <button class="${watchClass}" title="${watchTitle}" onclick="toggleWatch('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">${watchIcon}</button>
               <button class="btn btn-sm" onclick="createOrderFromSKU('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')" title="Create press order for this SKU" ${avail<1?'disabled style="opacity:0.4"':''}>Press it</button>
               <button class="btn btn-sm" onclick="quickReserve('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')" title="Add to working reservation" ${avail<1?'disabled style="opacity:0.4"':''}>Reserve</button>
+              <button class="btn btn-sm" onclick="openAdjModal('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')" title="Adjust stock (damage, gift, return)" ${avail<1?'disabled style="opacity:0.4"':''}>Adjust</button>
               <button class="btn btn-sm" onclick="openEditInv('${ev(i.type)}','${ev(i.brand)}','${ev(i.style)}','${ev(i.color)}','${i.size}')">Edit</button>
             </td>`;
           tbody.appendChild(tr);
@@ -4702,7 +4807,45 @@ function renderPressReport() {
   } else {
     html += `<p class="rpt-empty" style="padding:1rem 14px">No press orders logged this month.</p>`;
   }
-  html += `</div></div></div>`; // close card + report-printable
+  html += `</div></div>`; // close pressed card
+
+  // ── Adjustments section ─────────────────────────────────────────
+  const adjustments = adjustmentLog.filter(a => {
+    const d = new Date(a.isoDate);
+    return d >= start && d < end;
+  });
+  const adjQty = adjustments.reduce((s,a)=>s+a.qty, 0);
+
+  html += `<div class="rpt-section card" style="margin-bottom:1.5rem;padding:0;overflow:hidden">
+    <div class="rpt-collapse-header has-open-body" id="rpt-adj-hdr" onclick="toggleRptSection('rpt-adj')">
+      <span class="rpt-collapse-header-text">Stock adjustments this period (${adjustments.length} entries · ${adjQty} units removed)</span>
+      <span class="rpt-collapse-btn open" id="rpt-adj-btn">▼</span>
+    </div>
+    <div class="rpt-collapse-body" id="rpt-adj">`;
+  if(adjustments.length) {
+    // Group by reason for a quick summary
+    const byReason = {};
+    adjustments.forEach(a => { byReason[a.reason]=(byReason[a.reason]||0)+a.qty; });
+    html += `<div style="display:flex;gap:16px;padding:8px 14px;background:var(--bg2);border-top:0.5px solid var(--border);font-size:12px;color:var(--text2);flex-wrap:wrap">
+      ${Object.entries(byReason).map(([r,q])=>`<span><strong style="color:var(--text)">${q}</strong> ${r.toLowerCase()}</span>`).join('')}
+    </div>
+    <div style="overflow:auto"><table><thead><tr>
+      <th>Date</th><th>Brand</th><th>Style</th><th>Color</th><th>Size</th><th>Type</th><th>Qty</th><th>Reason</th><th>Note</th>
+    </tr></thead><tbody>`;
+    adjustments.forEach(a => {
+      html += `<tr>
+        <td>${a.date}</td><td>${a.brand}</td><td>${a.style||'—'}</td>
+        <td>${a.color}</td><td>${a.size}</td><td style="color:var(--text2)">${a.type}</td>
+        <td style="font-weight:600">${a.qty}</td>
+        <td><span class="badge badge-low">${a.reason}</span></td>
+        <td style="color:var(--text2);white-space:normal">${a.note||''}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  } else {
+    html += `<p class="rpt-empty" style="padding:1rem 14px">No stock adjustments this period.</p>`;
+  }
+  html += `</div></div></div>`; // close adj card + report-printable
 
   document.getElementById('report-press-content').innerHTML = html;
 }
