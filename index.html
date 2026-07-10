@@ -2230,21 +2230,28 @@ function reverseAdjustment(id) {
   if(!entry) return;
   if(!confirm(`Reverse this adjustment?\n\n${entry.qty}× ${entry.brand}${entry.style?' '+entry.style:''} ${entry.color} ${entry.size} — ${entry.reason}\n\nThis will restore ${entry.qty} unit${entry.qty!==1?'s':''} to inventory and remove this log entry.`)) return;
 
-  // Restore qty — add back to the most recent lot (or create a new one if none exist)
-  const item = getItem(entry.type, entry.brand, entry.style||'', entry.color, entry.size);
-  if(item && item.lots.length) {
-    // Add back to the last (most recent) lot
-    const lot = item.lots[item.lots.length - 1];
-    lot.qty += entry.qty;
-    // Don't exceed origQty — if it would, bump origQty too since this is a reinstatement
-    if(lot.qty > (lot.origQty ?? lot.qty)) lot.origQty = lot.qty;
-    item.qty = itemTotalQty(item);
-  } else if(item) {
-    // No lots — create one
-    item.lots.push({ qty: entry.qty, origQty: entry.qty, cost: null, isoDate: new Date().toISOString() });
+  // Find the item — try exact match first, then looser match ignoring style case/whitespace
+  let item = getItem(entry.type, entry.brand, entry.style||'', entry.color, entry.size);
+  if(!item) {
+    item = inventory.find(i =>
+      i.type  === entry.type  && i.brand === entry.brand &&
+      i.color === entry.color && i.size  === entry.size  &&
+      (i.style||'').trim().toLowerCase() === (entry.style||'').trim().toLowerCase()
+    );
+  }
+
+  if(item) {
+    if(item.lots.length) {
+      // Add back to the most recent lot with remaining capacity, else the last lot
+      const targetLot = [...item.lots].reverse().find(l => l.qty < (l.origQty ?? l.qty)) || item.lots[item.lots.length - 1];
+      targetLot.qty += entry.qty;
+      if(targetLot.qty > (targetLot.origQty ?? 0)) targetLot.origQty = targetLot.qty;
+    } else {
+      item.lots.push({ qty: entry.qty, origQty: entry.qty, cost: null, isoDate: new Date().toISOString() });
+    }
     item.qty = itemTotalQty(item);
   } else {
-    // Item was fully removed — recreate it
+    // Item no longer exists — recreate it
     inventory.push({
       type: entry.type, brand: entry.brand, style: entry.style||'',
       color: entry.color, size: entry.size, qty: entry.qty,
@@ -2252,9 +2259,8 @@ function reverseAdjustment(id) {
     });
   }
 
-  // Remove the adjustment entry
+  // Remove the adjustment entry and save everything
   adjustmentLog = adjustmentLog.filter(a => a.id !== id);
-
   save(); saveAdjLog(); updateStats(); updateFilters(); renderCurrentInvView();
   renderAdjLog();
 }
