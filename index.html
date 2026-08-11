@@ -209,7 +209,7 @@
     /* EDIT LOG MODAL */
     #edit-log-overlay { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.5); z-index:200; align-items:flex-start; justify-content:center; padding:1rem; overflow-y:auto; }
     #edit-log-overlay.open { display:flex; }
-    #edit-log-panel { background:var(--bg); border-radius:var(--radius-lg); padding:1.5rem; width:100%; max-width:480px; border:0.5px solid var(--border); margin:auto; }
+    #edit-log-panel { background:var(--bg); border-radius:var(--radius-lg); padding:1.5rem; width:100%; max-width:580px; border:0.5px solid var(--border); margin:auto; }
     #edit-log-panel h2 { font-size:16px; font-weight:600; margin-bottom:0.25rem; }
     .edit-log-meta { font-size:12px; color:var(--text2); margin-bottom:1rem; }
 
@@ -1042,10 +1042,36 @@
     </div>
 
     <hr class="divider" style="margin-top:0">
-    <p class="sub-label">Read-only — logged at press time</p>
+    <p class="sub-label">Garment <span style="font-weight:400;text-transform:none;letter-spacing:0;font-size:12px;color:var(--text2)">— changing this will adjust inventory automatically</span></p>
+    <div class="g2" style="margin-bottom:8px">
+      <div class="field">
+        <span class="label">Type</span>
+        <select id="edit-log-type" onchange="updateEditLogGarment()"></select>
+      </div>
+      <div class="field">
+        <span class="label">Brand</span>
+        <select id="edit-log-brand" onchange="updateEditLogGarment()"></select>
+      </div>
+    </div>
+    <div class="g2" style="margin-bottom:8px">
+      <div class="field">
+        <span class="label">Style / SKU</span>
+        <select id="edit-log-style" onchange="updateEditLogGarment()"></select>
+      </div>
+      <div class="field">
+        <span class="label">Color</span>
+        <select id="edit-log-color" onchange="updateEditLogGarment()"></select>
+      </div>
+    </div>
     <div class="g2" style="margin-bottom:16px">
-      <div class="field"><span class="label">Garment</span><input type="text" id="edit-log-item" disabled></div>
-      <div class="field"><span class="label">Qty pressed</span><input type="number" id="edit-log-qty" disabled></div>
+      <div class="field">
+        <span class="label">Size</span>
+        <select id="edit-log-size"></select>
+      </div>
+      <div class="field">
+        <span class="label">Qty pressed</span>
+        <input type="number" id="edit-log-qty" min="1">
+      </div>
     </div>
 
     <div id="edit-log-alert"></div>
@@ -4261,24 +4287,20 @@ function openEditLog(id) {
   shopSel.innerHTML = '<option value="">No shop</option>' +
     shops.map(s=>`<option value="${s}"${s===entry.shop?' selected':''}>${s}</option>`).join('');
 
-  // Populate editable fields
-  // Convert stored date to YYYY-MM-DD for date input
+  // Date
   let dateVal = '';
-  if(entry.isoDate) {
-    dateVal = entry.isoDate.slice(0,10);
-  } else if(entry.date) {
-    // Try to parse locale date string
-    const d = new Date(entry.date);
-    if(!isNaN(d)) dateVal = d.toISOString().slice(0,10);
-  }
-  document.getElementById('edit-log-date').value    = dateVal;
+  if(entry.isoDate) dateVal = entry.isoDate.slice(0,10);
+  else if(entry.date) { const d=new Date(entry.date); if(!isNaN(d)) dateVal=d.toISOString().slice(0,10); }
+  document.getElementById('edit-log-date').value     = dateVal;
   document.getElementById('edit-log-ordernum').value = entry.orderNum || '';
   document.getElementById('edit-log-cost').value     = entry.blankCost != null ? entry.blankCost : '';
   document.getElementById('edit-log-note').value     = entry.note || '';
+  document.getElementById('edit-log-qty').value      = entry.qty;
 
-  // Read-only garment summary
-  document.getElementById('edit-log-item').value = `${entry.brand}${entry.style?' '+entry.style:''} ${entry.color} ${entry.size} (${entry.type})`;
-  document.getElementById('edit-log-qty').value  = entry.qty;
+  // Populate garment dropdowns from inventory
+  const types   = [...new Set(inventory.map(i=>i.type))].sort();
+  const typeSel = document.getElementById('edit-log-type');
+  typeSel.innerHTML = types.map(t=>`<option${t===entry.type?' selected':''}>${t}</option>`).join('');
 
   // Meta line
   document.getElementById('edit-log-meta').textContent = `Logged on ${entry.date}${entry.shop?' · '+entry.shop:''}${entry.orderNum?' · #'+entry.orderNum:''}`;
@@ -4286,6 +4308,36 @@ function openEditLog(id) {
   document.getElementById('edit-log-alert').innerHTML = '';
   document.getElementById('edit-log-overlay').dataset.editId = id;
   document.getElementById('edit-log-overlay').classList.add('open');
+
+  // Populate cascading dropdowns based on current entry values
+  populateEditLogGarmentDropdowns(entry.type, entry.brand, entry.style||'', entry.color, entry.size);
+}
+
+function populateEditLogGarmentDropdowns(type, brand, style, color, size) {
+  const sizeOrder = ['XS','S','M','L','XL','2XL','3XL','4XL','5XL','One size'];
+  const brands  = [...new Set(inventory.filter(i=>i.type===type).map(i=>i.brand))].sort();
+  const styles  = [...new Set(inventory.filter(i=>i.type===type&&i.brand===brand).map(i=>i.style).filter(Boolean))].sort();
+  const colors  = [...new Set(inventory.filter(i=>i.type===type&&i.brand===brand&&(i.style===style||(!style&&!i.style))).map(i=>i.color))].sort();
+  const sizes   = [...new Set(inventory.filter(i=>i.type===type&&i.brand===brand&&(i.style===style||(!style&&!i.style))&&i.color===color).map(i=>i.size))].sort((a,b)=>sizeOrder.indexOf(a)-sizeOrder.indexOf(b));
+
+  const brandSel = document.getElementById('edit-log-brand');
+  const styleSel = document.getElementById('edit-log-style');
+  const colorSel = document.getElementById('edit-log-color');
+  const sizeSel  = document.getElementById('edit-log-size');
+
+  brandSel.innerHTML = brands.map(b=>`<option${b===brand?' selected':''}>${b}</option>`).join('');
+  styleSel.innerHTML = ['<option value="">(no style)</option>',...styles.map(s=>`<option${s===style?' selected':''}>${s}</option>`)].join('');
+  colorSel.innerHTML = colors.map(c=>`<option${c===color?' selected':''}>${c}</option>`).join('');
+  sizeSel.innerHTML  = sizes.map(s=>`<option${s===size?' selected':''}>${s}</option>`).join('');
+}
+
+function updateEditLogGarment() {
+  const type  = document.getElementById('edit-log-type').value;
+  const brand = document.getElementById('edit-log-brand').value;
+  const style = document.getElementById('edit-log-style').value;
+  const color = document.getElementById('edit-log-color').value;
+  const size  = document.getElementById('edit-log-size').value;
+  populateEditLogGarmentDropdowns(type, brand, style, color, size);
 }
 
 function closeEditLog() {
@@ -4308,13 +4360,67 @@ function saveEditLog() {
   const note      = document.getElementById('edit-log-note').value.trim();
   const alertEl   = document.getElementById('edit-log-alert');
 
-  // Update date fields
-  if(dateInput) {
-    const d = new Date(dateInput + 'T12:00:00'); // noon to avoid timezone shift
-    entry.isoDate  = d.toISOString();
-    entry.date     = d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+  const newType  = document.getElementById('edit-log-type').value;
+  const newBrand = document.getElementById('edit-log-brand').value;
+  const newStyle = document.getElementById('edit-log-style').value;
+  const newColor = document.getElementById('edit-log-color').value;
+  const newSize  = document.getElementById('edit-log-size').value;
+  const newQty   = parseInt(document.getElementById('edit-log-qty').value) || entry.qty;
+
+  const garmentChanged = newType!==entry.type || newBrand!==entry.brand ||
+    (newStyle||'')!==(entry.style||'') || newColor!==entry.color ||
+    newSize!==entry.size || newQty!==entry.qty;
+
+  if(garmentChanged) {
+    // 1. Restore old garment's stock (reverse the original deduction)
+    const oldItem = getItem(entry.type, entry.brand, entry.style||'', entry.color, entry.size);
+    if(oldItem) {
+      // Add qty back to the most recent lot
+      const lot = oldItem.lots[oldItem.lots.length-1];
+      if(lot) {
+        lot.qty += entry.qty;
+        if(lot.qty > (lot.origQty ?? 0)) lot.origQty = lot.qty;
+      }
+      oldItem.qty = itemTotalQty(oldItem);
+    }
+
+    // 2. Deduct from new garment via FIFO
+    const newItem = getItem(newType, newBrand, newStyle||'', newColor, newSize);
+    if(newItem) {
+      let remaining = newQty;
+      const lots = [...newItem.lots].sort((a,b)=>new Date(a.isoDate)-new Date(b.isoDate));
+      for(const lot of lots) {
+        if(remaining <= 0) break;
+        const take = Math.min(lot.qty, remaining);
+        lot.qty -= take;
+        remaining -= take;
+      }
+      newItem.qty = itemTotalQty(newItem);
+      if(remaining > 0) {
+        alertEl.innerHTML = `<div class="alert alert-error">Not enough stock for the new garment (${remaining} unit${remaining!==1?'s':''} short). Garment not changed.</div>`;
+        // Roll back old item change
+        if(oldItem) {
+          const lot = oldItem.lots[oldItem.lots.length-1];
+          if(lot) { lot.qty -= entry.qty; if(lot.qty < 0) lot.qty = 0; }
+          oldItem.qty = itemTotalQty(oldItem);
+        }
+        return;
+      }
+    }
+
+    // 3. Update entry garment fields
+    entry.type  = newType;  entry.brand = newBrand;
+    entry.style = newStyle||''; entry.color = newColor;
+    entry.size  = newSize;  entry.qty   = newQty;
+    save();
   }
 
+  // Update date fields
+  if(dateInput) {
+    const d = new Date(dateInput + 'T12:00:00');
+    entry.isoDate = d.toISOString();
+    entry.date    = d.toLocaleDateString('en-US', {month:'short', day:'numeric', year:'numeric'});
+  }
   entry.shop      = shop;
   entry.orderNum  = orderNum;
   entry.blankCost = costRaw !== '' ? Math.round(parseFloat(costRaw)*100)/100 : null;
@@ -4322,7 +4428,7 @@ function saveEditLog() {
 
   saveLog();
   alertEl.innerHTML = '<div class="alert alert-success">Changes saved.</div>';
-  setTimeout(() => { closeEditLog(); renderLog(); updateLogFilters(); }, 800);
+  setTimeout(() => { closeEditLog(); renderLog(); updateLogFilters(); updateStats(); renderCurrentInvView(); }, 800);
 }
 
 function deleteLogEntry() {
