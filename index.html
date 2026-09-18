@@ -1306,9 +1306,9 @@ function saveOptions() {
 function save()    { try { localStorage.setItem('pt_inv', JSON.stringify(inventory)); } catch(e){} }
 function saveLog()   { try { localStorage.setItem('pt_log',  JSON.stringify(orderLog)); } catch(e){} }
 let adjustmentLog = JSON.parse(localStorage.getItem('pt_adj') || '[]');
-let retiredShops = JSON.parse(localStorage.getItem('pt_retired_shops') || '[]');
-function saveRetiredShops() { localStorage.setItem('pt_retired_shops', JSON.stringify(retiredShops)); }
-// { type, brand, style }
+let retiredShops  = JSON.parse(localStorage.getItem('pt_retired_shops')  || '[]');
+let pressDefaults = JSON.parse(localStorage.getItem('pt_press_defaults') || '{}');
+function saveRetiredShops() { localStorage.setItem('pt_retired_shops',  JSON.stringify(retiredShops)); }
 function savePressDefaults() { localStorage.setItem('pt_press_defaults', JSON.stringify(pressDefaults)); }
 function saveStockLog() { try { localStorage.setItem('pt_slog', JSON.stringify(stockLog)); } catch(e){} }
 
