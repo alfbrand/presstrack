@@ -1306,7 +1306,8 @@ function saveOptions() {
 function save()    { try { localStorage.setItem('pt_inv', JSON.stringify(inventory)); } catch(e){} }
 function saveLog()   { try { localStorage.setItem('pt_log',  JSON.stringify(orderLog)); } catch(e){} }
 let adjustmentLog = JSON.parse(localStorage.getItem('pt_adj') || '[]');
-let pressDefaults = JSON.parse(localStorage.getItem('pt_press_defaults') || '{}');
+let retiredShops = JSON.parse(localStorage.getItem('pt_retired_shops') || '[]');
+function saveRetiredShops() { localStorage.setItem('pt_retired_shops', JSON.stringify(retiredShops)); }
 // { type, brand, style }
 function savePressDefaults() { localStorage.setItem('pt_press_defaults', JSON.stringify(pressDefaults)); }
 function saveStockLog() { try { localStorage.setItem('pt_slog', JSON.stringify(stockLog)); } catch(e){} }
@@ -1774,8 +1775,25 @@ function renderCatShops() {
     saveBtn.onclick = () => { const nv=input.value.trim(); if(!nv) return; renameShop(shop, nv); renderCatShops(); };
     deleteBtn.onclick = () => { if(!confirmDelete('shop', shop)) return; deleteShop(shop); renderCatShops(); };
 
+    // Retire / Unretire button
+    const retired = retiredShops.includes(shop);
+    const retireBtn = document.createElement('button');
+    retireBtn.className = 'btn btn-sm';
+    retireBtn.textContent = retired ? 'Unretire' : 'Retire';
+    retireBtn.title = retired ? 'Make active again — will appear in new press orders' : 'Hide from new press orders (keeps all history)';
+    if(retired) { retireBtn.style.color='var(--success-text)'; retireBtn.style.borderColor='var(--success-text)'; }
+    retireBtn.onclick = () => {
+      if(retired) retiredShops = retiredShops.filter(s=>s!==shop);
+      else if(!retiredShops.includes(shop)) retiredShops.push(shop);
+      saveRetiredShops(); renderCatShops();
+    };
+    if(retired) {
+      span.innerHTML = `${shop} <span style="font-size:10px;color:var(--text3);font-weight:400">(retired)</span>`;
+    }
+
     nameWrap.appendChild(span); nameWrap.appendChild(renameBtn);
     nameWrap.appendChild(input); nameWrap.appendChild(saveBtn);
+    nameWrap.appendChild(retireBtn);
     nameWrap.appendChild(deleteBtn);
 
     // Color swatches
@@ -1884,6 +1902,7 @@ function renameShop(oldVal, newVal) {
   if(!newVal || newVal===oldVal) return;
   customShops = customShops.map(v=>v===oldVal?newVal:v);
   if(shopColors[oldVal]) { shopColors[newVal]=shopColors[oldVal]; delete shopColors[oldVal]; }
+  if(retiredShops.includes(oldVal)) { retiredShops=retiredShops.map(s=>s===oldVal?newVal:s); saveRetiredShops(); }
   orderLog.forEach(o=>{ if(o.shop===oldVal) o.shop=newVal; });
   saveOptions(); saveLog();
 }
@@ -1904,7 +1923,7 @@ function deleteStyle(brand, val) {
 }
 function deleteColor(val)    { customColors=customColors.filter(v=>v!==val);    saveOptions(); }
 function deleteType(val)     { customTypes=customTypes.filter(v=>v!==val);      saveOptions(); }
-function deleteShop(val)     { customShops=customShops.filter(v=>v!==val); delete shopColors[val]; saveOptions(); }
+function deleteShop(val) { customShops=customShops.filter(v=>v!==val); delete shopColors[val]; retiredShops=retiredShops.filter(s=>s!==val); saveRetiredShops(); saveOptions(); }
 function deleteSupplier(val) { customSuppliers=customSuppliers.filter(v=>v!==val); saveOptions(); }
 
 // ── ADD FROM CATALOG PANEL ─────────────────────────────────────────
@@ -2149,7 +2168,7 @@ function confirmDeleteSelectedLots() {
   setTimeout(() => { const el = document.getElementById('delete-lots-preview'); if(el) el.innerHTML=''; }, 4000);
 }
 function exportData() {
-  const data = { inventory, orderLog, stockLog, adjustmentLog, reservations, customTypes, customBrands, customColors, customShops, shopColors, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
+  const data = { inventory, orderLog, stockLog, adjustmentLog, reservations, retiredShops, customTypes, customBrands, customColors, customShops, shopColors, customSuppliers, brandStyles, exportedAt: new Date().toISOString() };
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -2166,6 +2185,7 @@ function importData(e) {
       if(!confirm(`Import ${data.inventory.length} inventory items and ${(data.orderLog||[]).length} orders? This will replace your current data.`)) return;
       inventory    = data.inventory    || [];
       orderLog     = data.orderLog     || [];
+      retiredShops = data.retiredShops || [];
       adjustmentLog = data.adjustmentLog || [];
       customTypes  = data.customTypes  || [...DEFAULT_TYPES];
       customBrands = data.customBrands || [...DEFAULT_BRANDS];
@@ -3875,7 +3895,7 @@ function populatePressDropdowns() {
   pressDateEl.value = todayStr;
   pressDateEl.max   = todayStr;
 
-  buildComboSelect('press-shop','shop',customShops,'');
+  buildComboSelect('press-shop','shop',customShops.filter(s=>!retiredShops.includes(s)),'');
   document.getElementById('press-shop').onchange=function(){ handleCombo('shop'); };
   buildSimpleSelect('press-type','type',[...new Set(inventory.filter(i=>availableQty(i)>0).map(i=>i.type))]);
   ['press-brand','press-color','press-size'].forEach(id=>document.getElementById(id).innerHTML=`<option value="">Select ${id.replace('press-','')}</option>`);
