@@ -1200,6 +1200,32 @@
 
     <hr class="divider">
 
+    <p class="sub-label">Press order defaults</p>
+    <p style="font-size:12px;color:var(--text2);margin-bottom:10px">Pre-select these values each time you open a new press order.</p>
+    <div class="g3" style="margin-bottom:10px;max-width:480px">
+      <div class="field">
+        <span class="label">Default type</span>
+        <select id="pref-press-type" onchange="updatePrefPressType()">
+          <option value="">(none)</option>
+        </select>
+      </div>
+      <div class="field">
+        <span class="label">Default brand</span>
+        <select id="pref-press-brand" onchange="updatePrefPressBrand()">
+          <option value="">(none)</option>
+        </select>
+      </div>
+      <div class="field">
+        <span class="label">Default style</span>
+        <select id="pref-press-style">
+          <option value="">(none)</option>
+        </select>
+      </div>
+    </div>
+    <button class="btn btn-sm btn-primary" onclick="savePressDefaultsFromSettings()">Save defaults</button>
+
+    <hr class="divider">
+
     <!-- DATA -->
     <p class="sub-label">Data</p>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
@@ -1280,7 +1306,9 @@ function saveOptions() {
 function save()    { try { localStorage.setItem('pt_inv', JSON.stringify(inventory)); } catch(e){} }
 function saveLog()   { try { localStorage.setItem('pt_log',  JSON.stringify(orderLog)); } catch(e){} }
 let adjustmentLog = JSON.parse(localStorage.getItem('pt_adj') || '[]');
-function saveAdjLog() { try { localStorage.setItem('pt_adj', JSON.stringify(adjustmentLog)); } catch(e){} }
+let pressDefaults = JSON.parse(localStorage.getItem('pt_press_defaults') || '{}');
+// { type, brand, style }
+function savePressDefaults() { localStorage.setItem('pt_press_defaults', JSON.stringify(pressDefaults)); }
 function saveStockLog() { try { localStorage.setItem('pt_slog', JSON.stringify(stockLog)); } catch(e){} }
 
 function getItem(t,b,st,c,s) { return inventory.find(i=>i.type===t&&i.brand===b&&i.style===st&&i.color===c&&i.size===s); }
@@ -1504,6 +1532,47 @@ function clearApiKey() {
   document.getElementById('api-key-input').value = '';
 }
 // ── CATALOG MANAGER ────────────────────────────────────────────────
+function updatePrefPressType() {
+  const type  = document.getElementById('pref-press-type').value;
+  const brands = [...new Set(inventory.filter(i=>!type||i.type===type).map(i=>i.brand))].sort();
+  const brandSel = document.getElementById('pref-press-brand');
+  const cur = pressDefaults.brand;
+  brandSel.innerHTML = '<option value="">(none)</option>' + brands.map(b=>`<option${b===cur?' selected':''}>${b}</option>`).join('');
+  updatePrefPressBrand();
+}
+
+function updatePrefPressBrand() {
+  const type  = document.getElementById('pref-press-type').value;
+  const brand = document.getElementById('pref-press-brand').value;
+  const styles = [...new Set(inventory.filter(i=>(!type||i.type===type)&&(!brand||i.brand===brand)).map(i=>i.style).filter(Boolean))].sort();
+  const styleSel = document.getElementById('pref-press-style');
+  const cur = pressDefaults.style;
+  styleSel.innerHTML = '<option value="">(none)</option>' + styles.map(s=>`<option${s===cur?' selected':''}>${s}</option>`).join('');
+}
+
+function populatePrefPressDropdowns() {
+  const types = [...new Set(inventory.map(i=>i.type))].sort();
+  const typeSel = document.getElementById('pref-press-type');
+  if(!typeSel) return;
+  typeSel.innerHTML = '<option value="">(none)</option>' + types.map(t=>`<option${t===pressDefaults.type?' selected':''}>${t}</option>`).join('');
+  updatePrefPressType();
+  // Re-apply saved selections after cascading populate
+  if(pressDefaults.brand) document.getElementById('pref-press-brand').value = pressDefaults.brand;
+  if(pressDefaults.style) document.getElementById('pref-press-style').value = pressDefaults.style;
+}
+
+function savePressDefaultsFromSettings() {
+  pressDefaults = {
+    type:  document.getElementById('pref-press-type').value  || '',
+    brand: document.getElementById('pref-press-brand').value || '',
+    style: document.getElementById('pref-press-style').value || '',
+  };
+  savePressDefaults();
+  const btn = event.target;
+  const orig = btn.textContent;
+  btn.textContent = 'Saved ✓'; btn.disabled = true;
+  setTimeout(() => { btn.textContent = orig; btn.disabled = false; }, 1500);
+}
 function saveThreshold() {
   const val = parseInt(document.getElementById('low-threshold-input').value);
   if(isNaN(val) || val < 1) { alert('Please enter a valid threshold (1 or more).'); return; }
@@ -1524,6 +1593,7 @@ function openSettings() {
   renderCatShops();
   renderCatSuppliers();
   populateCatStyleBrandDropdowns();
+  populatePrefPressDropdowns();
   document.getElementById('settings-overlay').classList.add('open');
 }
 
@@ -3812,6 +3882,29 @@ function populatePressDropdowns() {
   const ps=document.getElementById('press-style'); ps.innerHTML='<option value="">Select style</option>'; ps.disabled=true;
   document.getElementById('press-style-hint').textContent='Select a brand first';
   document.getElementById('press-cost-preview').style.display='none';
+
+  // Apply saved defaults if set
+  if(pressDefaults.type) {
+    const typeSel = document.getElementById('press-type');
+    if([...typeSel.options].some(o=>o.value===pressDefaults.type)) {
+      typeSel.value = pressDefaults.type;
+      updatePressType();
+      if(pressDefaults.brand) {
+        const brandSel = document.getElementById('press-brand');
+        if([...brandSel.options].some(o=>o.value===pressDefaults.brand)) {
+          brandSel.value = pressDefaults.brand;
+          updatePressBrand();
+          if(pressDefaults.style) {
+            const styleSel = document.getElementById('press-style');
+            if([...styleSel.options].some(o=>o.value===pressDefaults.style)) {
+              styleSel.value = pressDefaults.style;
+              updatePressStyle();
+            }
+          }
+        }
+      }
+    }
+  }
 }
 function updatePressType() {
   const type=document.getElementById('press-type').value;
