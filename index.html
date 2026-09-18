@@ -4214,11 +4214,14 @@ function renderLog() {
     return;
   }
 
-  // Sort groups by most recent line item date
+  // Sort groups by most recently entered (max id = most recently logged), then by press date
   const sortedKeys = Object.keys(groups).sort((a,b) => {
+    const maxIdA = Math.max(...groups[a].map(o=>o.id));
+    const maxIdB = Math.max(...groups[b].map(o=>o.id));
     const da = Math.max(...groups[a].map(o=>new Date(o.isoDate||o.date).getTime()));
     const db = Math.max(...groups[b].map(o=>new Date(o.isoDate||o.date).getTime()));
-    return logSortDir === 'desc' ? db - da : da - db;
+    if(logSortDir === 'desc') return db !== da ? db - da : maxIdB - maxIdA;
+    return da !== db ? da - db : maxIdA - maxIdB;
   });
 
   container.innerHTML = '';
