@@ -2567,10 +2567,17 @@ function onEditInvBrandChange(brand, currentStyle) {
 function renderEditInvLots(item) {
   const el = document.getElementById('edit-inv-lots');
   if(!item.lots || !item.lots.length) { el.innerHTML='<p style="font-size:13px;color:var(--text3)">No lots on record.</p>'; return; }
+  const colorOpts = customColors.map(col =>
+    `<option value="${col}"${col===item.color?' selected':''}>${col}</option>`
+  ).join('');
   el.innerHTML = item.lots.map((lot, idx) => {
     const isLegacy = lot.isoDate && new Date(lot.isoDate).getTime() === 0;
     const dateVal  = isLegacy || !lot.isoDate ? '' : lot.isoDate.slice(0, 10);
     const origQty  = lot.origQty ?? lot.qty;
+    const lotColor = lot._color || item.color;
+    const colorOptsForLot = customColors.map(col =>
+      `<option value="${col}"${col===lotColor?' selected':''}>${col}</option>`
+    ).join('');
     return `<div style="padding:8px 10px;background:var(--bg2);border-radius:var(--radius);margin-bottom:6px">
       <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap">
         <div style="display:flex;align-items:center;gap:5px;flex-shrink:0">
@@ -2586,6 +2593,13 @@ function renderEditInvLots(item) {
             <input type="number" class="edit-inv-lot-cost" data-lot-idx="${idx}" min="0" step="0.01"
               value="${lot.cost!=null?lot.cost:''}" placeholder="—"
               style="width:80px;border:none;border-radius:0;padding:5px 8px;font-size:13px;background:var(--bg);color:var(--text)">
+          </div>
+          <div style="display:flex;align-items:center;gap:4px;flex-shrink:0">
+            <span style="font-size:11px;color:var(--text2)">Color:</span>
+            <select class="edit-inv-lot-color" data-lot-idx="${idx}"
+              style="padding:4px 6px;font-size:12px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+              ${colorOptsForLot}
+            </select>
           </div>
         </div>
       </div>
@@ -2642,6 +2656,13 @@ function saveEditInv() {
       item.lots[idx].cost = val !== '' ? Math.round(parseFloat(val)*100)/100 : null;
     }
   });
+  // Capture per-lot color overrides before mutating dates
+  const lotColorOverrides = {};
+  document.querySelectorAll('.edit-inv-lot-color').forEach(sel => {
+    const idx = parseInt(sel.dataset.lotIdx);
+    lotColorOverrides[idx] = sel.value;
+  });
+
   document.querySelectorAll('.edit-inv-lot-date').forEach(input => {
     const idx = parseInt(input.dataset.lotIdx);
     const val = input.value;
@@ -2667,7 +2688,60 @@ function saveEditInv() {
       }
     }
   });
+
+  // Split out lots assigned to a different color and merge into their target SKU
+  const lotsToReassign = [];
+  item.lots = item.lots.filter((lot, idx) => {
+    const targetColor = lotColorOverrides[idx] ?? item.color;
+    if(targetColor && targetColor !== item.color) {
+      lotsToReassign.push({ lot, targetColor });
+      return false; // remove from this item
+    }
+    return true;
+  });
+  lotsToReassign.forEach(({ lot, targetColor }) => {
+    delete lot._color;
+    let target = getItem(newType, newBrand, newStyle||'', targetColor, newSize);
+    if(!target) {
+      target = { type: newType, brand: newBrand, style: newStyle||'', color: targetColor, size: newSize, qty: 0, lots: [] };
+      inventory.push(target);
+    }
+    target.lots.push(lot);
+    target.qty = itemTotalQty(target);
+    // Patch stockLog color for this lot
+    const sMatch = stockLog.find(e =>
+      e.isoDate === lot.isoDate &&
+      e.type === item.type && e.brand === item.brand &&
+      e.style === (item.style||'') && e.color === item.color && e.size === item.size
+    );
+    if(sMatch) sMatch.color = targetColor;
+  });
   saveStockLog();
+
+  // Patch orderLog entries if identity fields changed
+  const identityChanged = origT !== newType || origB !== newBrand || origSt !== (newStyle||'') || origC !== newColor || origS !== newSize;
+  if(identityChanged) {
+    orderLog.forEach(order => {
+      if(!order.items) return;
+      order.items.forEach(li => {
+        if(li.type===origT && li.brand===origB && (li.style||'')===(origSt||'') && li.color===origC && li.size===origS) {
+          li.type  = newType;
+          li.brand = newBrand;
+          li.style = newStyle || '';
+          li.color = newColor;
+          li.size  = newSize;
+        }
+      });
+    });
+    saveLog();
+    // Also patch stockLog
+    stockLog.forEach(e => {
+      if(e.type===origT && e.brand===origB && (e.style||'')===(origSt||'') && e.color===origC && e.size===origS) {
+        e.type  = newType; e.brand = newBrand; e.style = newStyle||''; e.color = newColor; e.size = newSize;
+      }
+    });
+    saveStockLog();
+  }
 
   // Update identity fields
   item.type  = newType;
