@@ -1310,6 +1310,7 @@ function saveLog()   { try { localStorage.setItem('pt_log',  JSON.stringify(orde
 let adjustmentLog = JSON.parse(localStorage.getItem('pt_adj') || '[]');
 let retiredShops  = JSON.parse(localStorage.getItem('pt_retired_shops')  || '[]');
 let pressDefaults = JSON.parse(localStorage.getItem('pt_press_defaults') || '{}');
+function saveAdjLog()     { try { localStorage.setItem('pt_adj', JSON.stringify(adjustmentLog)); } catch(e){} }
 function saveRetiredShops() { localStorage.setItem('pt_retired_shops',  JSON.stringify(retiredShops)); }
 function savePressDefaults() { localStorage.setItem('pt_press_defaults', JSON.stringify(pressDefaults)); }
 function saveStockLog() { try { localStorage.setItem('pt_slog', JSON.stringify(stockLog)); } catch(e){} }
