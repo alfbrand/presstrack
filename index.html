@@ -757,6 +757,7 @@
             <option>Data entry error</option>
           </select>
         </div>
+        <button class="btn btn-primary" onclick="openManualAdjPanel()">+ Log adjustment</button>
       </div>
       <div id="adj-log-stats" style="display:flex;gap:10px;margin-bottom:1rem;flex-wrap:wrap"></div>
       <div class="tbl-wrap">
@@ -882,6 +883,77 @@
 </div>
 
 </div><!-- /app-shell -->
+
+<!-- MANUAL ADJUSTMENT SLIDE-OUT -->
+<div class="slideout-overlay" id="slideout-manual-adj" onclick="closeSlideoutIfOutside(event, 'manual-adj')">
+  <div class="slideout-panel">
+    <div class="slideout-header">
+      <h2>Log adjustment</h2>
+      <button class="btn-icon" onclick="closeSlideout('manual-adj')">✕</button>
+    </div>
+    <div style="padding:1.25rem;overflow-y:auto;flex:1">
+      <div id="manual-adj-alert"></div>
+      <div class="g2" style="margin-bottom:12px">
+        <div class="field">
+          <span class="label">Type</span>
+          <select id="madj-type" onchange="onMadjTypeChange()"></select>
+        </div>
+        <div class="field">
+          <span class="label">Brand</span>
+          <select id="madj-brand" onchange="onMadjBrandChange()"></select>
+        </div>
+      </div>
+      <div class="g2" style="margin-bottom:12px">
+        <div class="field">
+          <span class="label">Style / SKU</span>
+          <select id="madj-style"></select>
+        </div>
+        <div class="field">
+          <span class="label">Color</span>
+          <select id="madj-color" onchange="updateMadjStockNote()"></select>
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:12px">
+        <span class="label">Size</span>
+        <select id="madj-size" onchange="updateMadjStockNote()">
+          <option value="">— select —</option>
+          <option>XS</option><option>S</option><option>M</option><option>L</option><option>XL</option>
+          <option>2XL</option><option>3XL</option><option>4XL</option><option>5XL</option>
+          <option>6XL</option><option>One Size</option>
+        </select>
+      </div>
+      <div id="madj-stock-note" style="font-size:12px;color:var(--text2);margin-bottom:12px;min-height:16px"></div>
+      <div class="g2" style="margin-bottom:12px">
+        <div class="field">
+          <span class="label">Reason</span>
+          <select id="madj-reason">
+            <option value="Damaged / destroyed">Damaged / destroyed</option>
+            <option value="Returned to supplier">Returned to supplier</option>
+            <option value="Gift / sample">Gift / sample</option>
+            <option value="Shrinkage / loss">Shrinkage / loss</option>
+            <option value="Data entry error">Data entry error</option>
+          </select>
+        </div>
+        <div class="field">
+          <span class="label">Qty to remove</span>
+          <input type="number" id="madj-qty" min="1" value="1">
+        </div>
+      </div>
+      <div class="field" style="margin-bottom:16px">
+        <span class="label">Date</span>
+        <input type="date" id="madj-date" style="padding:8px 10px;font-size:14px;border:0.5px solid var(--border2);border-radius:var(--radius);background:var(--bg);color:var(--text)">
+      </div>
+      <div class="field" style="margin-bottom:20px">
+        <span class="label">Note (optional)</span>
+        <input type="text" id="madj-note" placeholder="e.g. Misprinted, wrong color on CSV import">
+      </div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-primary" onclick="submitManualAdj()">Log adjustment</button>
+        <button class="btn" onclick="closeSlideout('manual-adj')">Cancel</button>
+      </div>
+    </div>
+  </div>
+</div>
 
 <!-- RESERVATION SLIDE-OUT -->
 <div class="slideout-overlay" id="slideout-reserve" onclick="closeSlideoutIfOutside(event, 'reserve')">
@@ -2450,6 +2522,100 @@ function submitAdjustment() {
   updateStats(); renderCurrentInvView();
   overlay.style.display = 'none';
 }
+
+// ── Manual adjustment slide-out ──────────────────────────────────────────────
+function openManualAdjPanel() {
+  // Populate dropdowns
+  buildComboSelect('madj-type',  'type',  customTypes,  customTypes[0]||'');
+  buildComboSelect('madj-brand', 'brand', customBrands, customBrands[0]||'');
+  onMadjBrandChange();
+  buildComboSelect('madj-color', 'color', customColors, customColors[0]||'');
+  // Default date to today
+  document.getElementById('madj-date').value = new Date().toISOString().slice(0,10);
+  document.getElementById('madj-qty').value = '1';
+  document.getElementById('madj-note').value = '';
+  document.getElementById('manual-adj-alert').innerHTML = '';
+  updateMadjStockNote();
+  openSlideout('manual-adj');
+}
+
+function onMadjTypeChange() { updateMadjStockNote(); }
+
+function onMadjBrandChange() {
+  const brand = document.getElementById('madj-brand').value;
+  const styles = stylesForBrand(brand);
+  buildComboSelect('madj-style', 'style / SKU', styles, '');
+  updateMadjStockNote();
+}
+
+function updateMadjStockNote() {
+  const t  = document.getElementById('madj-type')?.value  || '';
+  const b  = document.getElementById('madj-brand')?.value || '';
+  const st = document.getElementById('madj-style')?.value || '';
+  const c  = document.getElementById('madj-color')?.value || '';
+  const s  = document.getElementById('madj-size')?.value  || '';
+  const el = document.getElementById('madj-stock-note');
+  if(!el) return;
+  if(!b || !c || !s) { el.textContent = ''; return; }
+  const item = getItem(t, b, st, c, s);
+  if(!item) { el.textContent = 'No matching SKU in inventory.'; return; }
+  const avail = availableQty(item);
+  el.textContent = `${avail} unit${avail!==1?'s':''} available`;
+}
+
+function submitManualAdj() {
+  const t  = document.getElementById('madj-type').value.trim();
+  const b  = document.getElementById('madj-brand').value.trim();
+  const st = document.getElementById('madj-style').value.trim();
+  const c  = document.getElementById('madj-color').value.trim();
+  const s  = document.getElementById('madj-size').value.trim();
+  const reason = document.getElementById('madj-reason').value;
+  const qty    = parseInt(document.getElementById('madj-qty').value) || 0;
+  const note   = document.getElementById('madj-note').value.trim();
+  const dateVal = document.getElementById('madj-date').value;
+  const alertEl = document.getElementById('manual-adj-alert');
+
+  if(!t || !b || !c || !s) {
+    alertEl.innerHTML = '<div class="alert alert-error">Type, brand, color, and size are required.</div>';
+    return;
+  }
+  const item = getItem(t, b, st, c, s);
+  if(!item) {
+    alertEl.innerHTML = '<div class="alert alert-error">No matching SKU found in inventory.</div>';
+    return;
+  }
+  const avail = availableQty(item);
+  if(qty < 1 || qty > avail) {
+    alertEl.innerHTML = `<div class="alert alert-error">Enter a quantity between 1 and ${avail}.</div>`;
+    return;
+  }
+
+  // Deduct via FIFO
+  let remaining = qty;
+  const lots = [...item.lots].sort((a,b) => new Date(a.isoDate)-new Date(b.isoDate));
+  lots.forEach(lot => {
+    if(remaining <= 0 || lot.qty <= 0) return;
+    const take = Math.min(lot.qty, remaining);
+    lot.qty -= take;
+    remaining -= take;
+  });
+  item.qty = itemTotalQty(item);
+
+  const isoDate = dateVal ? new Date(dateVal + 'T12:00:00').toISOString() : new Date().toISOString();
+  adjustmentLog.unshift({
+    id:      Date.now(),
+    isoDate,
+    date:    new Date(isoDate).toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'}),
+    type: t, brand: b, style: st||'', color: c, size: s,
+    qty, reason, note,
+  });
+
+  save(); saveAdjLog();
+  updateStats(); renderCurrentInvView(); renderAdjLog();
+  alertEl.innerHTML = '<div class="alert alert-success">Adjustment logged.</div>';
+  setTimeout(() => closeSlideout('manual-adj'), 900);
+}
+
 let workingRes = []; // [{type,brand,style,color,size,qty}]
 
 function quickReserve(t, b, st, c, s) {
