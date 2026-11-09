@@ -4138,7 +4138,8 @@ function populatePressDropdowns() {
   pressDateEl.value = todayStr;
   pressDateEl.max   = todayStr;
 
-  buildComboSelect('press-shop','shop',customShops.filter(s=>!retiredShops.includes(s)),'');
+  const logShopFilter = document.getElementById('log-filter-shop')?.value || '';
+  buildComboSelect('press-shop','shop',customShops.filter(s=>!retiredShops.includes(s)), logShopFilter);
   document.getElementById('press-shop').onchange=function(){ handleCombo('shop'); };
   buildSimpleSelect('press-type','type',[...new Set(inventory.filter(i=>availableQty(i)>0).map(i=>i.type))]);
   ['press-brand','press-color','press-size'].forEach(id=>document.getElementById(id).innerHTML=`<option value="">Select ${id.replace('press-','')}</option>`);
